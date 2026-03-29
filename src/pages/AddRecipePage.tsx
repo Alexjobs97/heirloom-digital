@@ -126,10 +126,47 @@ function ParseReview({
   const [steps,    setSteps]    = useState<string[]>(parsed.steps.length ? parsed.steps : [""]);
   const [tags,     setTags]     = useState(parsed.tags.join(", "));
   const [saving,   setSaving]   = useState(false);
+  const [coverImage, setCoverImage] = useState<string>("");
 
   const [ingredients, setIngredients] = useState<EditableIngredient[]>(() =>
     parsed.ingredients.map((ing) => ({ ...ing, _id: generateId() }))
   );
+
+  // ─── Gestione immagine ───────────────────────────────────────────────────────
+
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const { uploadImage, optimizeImage } = await import("../lib/io-enhanced");
+      const result = await uploadImage(file, 3);
+      const optimized = await optimizeImage(result.dataUrl, 1200, 800, 0.8);
+      setCoverImage(optimized);
+    } catch (err) {
+      console.error("Errore upload immagine", err);
+      alert("Errore nel caricamento dell'immagine. Riprova con un file più piccolo.");
+    }
+  }, []);
+
+  const handleImageUrl = useCallback(async () => {
+    const url = prompt("Incolla l'URL dell'immagine:");
+    if (!url) return;
+
+    try {
+      const { loadImageFromUrl, optimizeImage } = await import("../lib/io-enhanced");
+      const result = await loadImageFromUrl(url);
+      const optimized = await optimizeImage(result.dataUrl, 1200, 800, 0.8);
+      setCoverImage(optimized);
+    } catch (err) {
+      console.error("Errore caricamento URL", err);
+      alert("Impossibile caricare l'immagine dall'URL. Assicurati che sia un link diretto a un'immagine.");
+    }
+  }, []);
+
+  const removeImage = useCallback(() => {
+    setCoverImage("");
+  }, []);
 
   // ── Ingredienti ─────────────────────────────────────────────────────────────
 
@@ -181,6 +218,7 @@ function ParseReview({
             displayName: rest.name.trim(),
             canonicalId: rest.canonicalId || rest.name.trim().toLowerCase(),
           })),
+        coverImage: coverImage || undefined,
       };
       await onSave(recipe);
     } finally {
@@ -254,6 +292,80 @@ function ParseReview({
 
         {/* Colonna dx: form editabile */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+
+          {/* Immagine di copertina */}
+          <div className="card" style={{ padding: "1rem" }}>
+            <p style={{ fontWeight: 700, fontSize: "0.9rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.03em" }}>
+              IMMAGINE DI COPERTINA
+            </p>
+            
+            {coverImage ? (
+              <div style={{ position: "relative", marginBottom: "0.75rem" }}>
+                <img
+                  src={coverImage}
+                  alt="Anteprima copertina"
+                  style={{
+                    width: "100%",
+                    aspectRatio: "4 / 3",
+                    objectFit: "cover",
+                    borderRadius: "var(--radius-md)",
+                    display: "block",
+                  }}
+                />
+                <button
+                  onClick={removeImage}
+                  style={{
+                    position: "absolute",
+                    top: "0.5rem",
+                    right: "0.5rem",
+                    background: "rgba(0,0,0,0.6)",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    color: "#fff",
+                  }}
+                  aria-label="Rimuovi immagine"
+                >
+                  <IconTrash />
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                border: "2px dashed var(--border)",
+                borderRadius: "var(--radius-md)",
+                padding: "1.5rem",
+                textAlign: "center",
+                marginBottom: "0.75rem",
+              }}>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "0.75rem" }}>
+                  Nessuna immagine caricata
+                </p>
+                <label
+                  className="btn btn-ghost"
+                  style={{ cursor: "pointer", marginRight: "0.5rem" }}
+                >
+                  Carica immagine
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    style={{ display: "none" }}
+                  />
+                </label>
+                <button
+                  className="btn btn-ghost"
+                  onClick={handleImageUrl}
+                >
+                  Da URL
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Titolo + meta */}
           <div className="card" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>

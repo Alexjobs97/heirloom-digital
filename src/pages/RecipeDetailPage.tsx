@@ -88,6 +88,7 @@ export default function RecipeDetailPage() {
   const navigate  = useNavigate();
   const { recipe, loading, error } = useRecipe(id);
   const { updateRecipe, removeRecipe, toggleStar } = useRecipes();
+  const { t } = useTranslation();
   const toast = useToast();
 
   const [servings,     setServings]     = useState<number | null>(null);
