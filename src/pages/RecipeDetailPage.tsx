@@ -7,10 +7,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useRecipe, useRecipes } from "../hooks/useRecipes";
 import { useScaledIngredients } from "../hooks/useScaledIngredients";
 import { clampServings, formatTime } from "../lib/scaling";
-import { exportSingleRecipe } from "../lib/io";
+import { copyRecipeToClipboard } from "../lib/io-enhanced";
 import type { Ingredient, Recipe } from "../types";
 import ServingsSlider from "../components/ServingsSlider";
 import IngredientRow from "../components/IngredientRow";
+import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
 
@@ -126,9 +127,9 @@ export default function RecipeDetailPage() {
 
   const handleExport = useCallback(async () => {
     if (!recipe) return;
-    await exportSingleRecipe(recipe);
-    toast.show("Ricetta esportata ✓");
-  }, [recipe, toast]);
+    await copyRecipeToClipboard(recipe);
+    toast.show(t("action.copied"));
+  }, [recipe, toast, t]);
 
   const handlePrint = useCallback(() => window.print(), []);
 
@@ -187,13 +188,13 @@ export default function RecipeDetailPage() {
           <button className="btn btn-ghost" onClick={handleToggleStar} title={recipe.starred ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"} style={{ padding: "0.5rem 0.75rem", gap: "0.3rem", color: recipe.starred ? "var(--brand)" : undefined }}>
             <IconHeart f={recipe.starred} />
           </button>
-          <button className="btn btn-ghost" onClick={handleExport} title="Esporta JSON" style={{ padding: "0.5rem 0.75rem" }}>
+          <button className="btn btn-ghost" onClick={handleExport} title={t("action.copyToClipboard")} style={{ padding: "0.5rem 0.75rem" }}>
             <IconShare />
           </button>
-          <button className="btn btn-ghost no-print" onClick={handlePrint} title="Stampa / PDF" style={{ padding: "0.5rem 0.75rem" }}>
+          <button className="btn btn-ghost no-print" onClick={handlePrint} title={t("detail.print")} style={{ padding: "0.5rem 0.75rem" }}>
             <IconPrint />
           </button>
-          <button className="btn btn-ghost" onClick={() => setShowDelete(true)} title="Elimina ricetta" style={{ padding: "0.5rem 0.75rem", color: "var(--error)" }}>
+          <button className="btn btn-ghost" onClick={() => setShowDelete(true)} title={t("detail.delete")} style={{ padding: "0.5rem 0.75rem", color: "var(--error)" }}>
             <IconTrash />
           </button>
         </div>

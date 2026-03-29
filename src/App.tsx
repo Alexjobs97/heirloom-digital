@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "./i18n/useTranslation";
+import { saveSettings } from "./lib/db";
 import { unlockAudio } from "./lib/audio";
 
 // Import diretti — niente lazy, evita problemi di risoluzione path con Vite+PWA
@@ -17,10 +18,21 @@ function IconPlus()    { return <svg viewBox="0 0 24 24" fill="none" stroke="cur
 function IconCalendar(){ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>; }
 function IconMoon()    { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
 function IconSun()     { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
+function IconGlobe()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>; }
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-function Header({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
+function Header({ 
+  dark, 
+  onToggleDark, 
+  language, 
+  onToggleLanguage 
+}: { 
+  dark: boolean; 
+  onToggleDark: () => void;
+  language: "it" | "ja" | "en";
+  onToggleLanguage: () => void;
+}) {
   const { t } = useTranslation();
   const location = useLocation();
 
@@ -77,6 +89,27 @@ function Header({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => voi
           ))}
 
           <button
+            onClick={onToggleLanguage}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+              display: "flex",
+              alignItems: "center",
+              padding: "0.45rem 0.65rem",
+              borderRadius: "var(--radius-md)",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+            }}
+            aria-label="Cambia lingua"
+            title={`Lingua: ${language.toUpperCase()}`}
+          >
+            <IconGlobe />
+            <span style={{ marginLeft: "0.25rem" }}>{language === "it" ? "IT" : language === "ja" ? "JP" : "EN"}</span>
+          </button>
+
+          <button
             onClick={onToggleDark}
             style={{
               background: "none",
@@ -118,6 +151,10 @@ function AppShell() {
   const [dark, setDark] = useState(
     () => document.documentElement.classList.contains("dark")
   );
+  
+  const [language, setLanguage] = useState<"it" | "ja" | "en">(
+    () => (localStorage.getItem("heirloom_language") as "it" | "ja" | "en") || "it"
+  );
 
   const toggleDark = useCallback(() => {
     const next = !dark;
@@ -125,6 +162,21 @@ function AppShell() {
     document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("heirloom_dark", String(next));
   }, [dark]);
+  
+  const toggleLanguage = useCallback(async () => {
+    const next: "it" | "ja" | "en" = language === "it" ? "ja" : language === "ja" ? "en" : "it";
+    setLanguage(next);
+    localStorage.setItem("heirloom_language", next);
+    
+    // Salva nelle impostazioni del DB
+    try {
+      const { getSettings } = await import("./lib/db");
+      const settings = await getSettings();
+      await saveSettings({ ...settings, language: next });
+    } catch (e) {
+      console.error("Errore salvataggio lingua", e);
+    }
+  }, [language]);
 
   useEffect(() => {
     const unlock = () => { unlockAudio(); };
@@ -134,7 +186,7 @@ function AppShell() {
 
   return (
     <>
-      <Header dark={dark} onToggleDark={toggleDark} />
+      <Header dark={dark} onToggleDark={toggleDark} language={language} onToggleLanguage={toggleLanguage} />
       <main style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <Routes>
           <Route path="/"            element={<HomePage />} />

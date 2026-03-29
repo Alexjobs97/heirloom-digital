@@ -180,6 +180,20 @@ const it = {
   "pwa.updateAvailable": "È disponibile un aggiornamento",
   "pwa.updateNow": "Aggiorna",
   "pwa.installPrompt": "Installa l'app",
+
+  // ─── Nuove funzionalità ───────────────────────────────────────────────────
+  "action.copyToClipboard": "Copia negli appunti",
+  "action.copied": "Copiato!",
+  "action.uploadImage": "Carica immagine",
+  "action.removeImage": "Rimuovi immagine",
+  "action.importFromUrl": "Importa da URL",
+  "label.imageUrl": "URL immagine",
+  "label.coverImage": "Immagine di copertina",
+  "placeholder.imageUrl": "Incolla l'URL dell'immagine…",
+  "confirm.deleteImage": "Sei sicuro di voler rimuovere questa immagine?",
+  "error.imageLoad": "Impossibile caricare l'immagine",
+  "error.invalidUrl": "URL non valido",
+  "share.recipeText": "Ricetta: {{title}}\n\nIngredienti:\n{{ingredients}}\n\nProcedimento:\n{{steps}}\n\nDa {{app}}",
 } as const;
 
 export type TranslationKey = keyof typeof it;
