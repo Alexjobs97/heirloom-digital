@@ -10,20 +10,32 @@ export interface Ingredient {
   note?: string;                 // es. "a temperatura ambiente"
 }
 
+// ─── Bilingual locale ──────────────────────────────────────────────────────────
+
+/**
+ * Contenuto tradotto per una singola lingua.
+ * Usato quando la ricetta è stata importata con blocchi === IT === / === JP ===
+ */
+export interface RecipeLocale {
+  title: string;
+  ingredients: Ingredient[];
+  steps: string[];
+}
+
 // ─── Recipe ────────────────────────────────────────────────────────────────────
 
 export type RecipeLanguage = "it" | "ja" | "en";
 
 export interface Recipe {
   id: string;                    // UUID
-  title: string;
+  title: string;                 // italiano (o lingua principale)
   coverImage?: string;           // data URL or external URL
   yield: number;                 // porzioni di base (es. 4)
   totalTime: number;             // minuti totali (0 = non specificato)
   prepTime?: number;             // minuti preparazione
   cookTime?: number;             // minuti cottura
-  ingredients: Ingredient[];
-  steps: string[];
+  ingredients: Ingredient[];     // italiano
+  steps: string[];               // italiano
   tags: string[];
   language: RecipeLanguage;
   starred?: boolean;
@@ -31,6 +43,12 @@ export interface Recipe {
   lastCooked?: string;           // ISO string
   source?: string;               // URL o nome fonte
   notes?: string;                // note libere
+
+  /**
+   * Versione giapponese della ricetta (opzionale).
+   * Presente solo se il testo originale conteneva === JP === block.
+   */
+  ja?: RecipeLocale;
 }
 
 // ─── Parser ────────────────────────────────────────────────────────────────────
@@ -57,6 +75,16 @@ export interface ParsedResult {
   tags: string[];
   language: RecipeLanguage;
   warnings: string[];            // es. "solido dato in volume, verifica quantità"
+
+  /**
+   * Presente se il testo conteneva un blocco === JP ===
+   */
+  ja?: {
+    title: string;
+    ingredients: RawIngredient[];
+    steps: string[];
+  };
+  isBilingual: boolean;
 }
 
 // ─── Timer ─────────────────────────────────────────────────────────────────────
