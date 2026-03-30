@@ -6,20 +6,21 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { SearchFilters } from "../types";
 import { useRecipes } from "../hooks/useRecipes";
-import { importBook } from "../lib/io";
+import { importBook, exportBook } from "../lib/io";
 import RecipeCard from "../components/RecipeCard";
 import SearchBar from "../components/SearchBar";
+import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
 
 function IconPlus() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="20" height="20"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
 }
 function IconUpload() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
 }
-function IconBook() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="48" height="48"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
+function IconDownload() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -36,18 +37,10 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 
 function SkeletonGrid() {
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-      gap: "1rem",
-    }}>
+    <div className="recipe-grid">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="card" style={{ overflow: "hidden" }}>
-          <div className="skeleton" style={{ aspectRatio: "4/3" }} />
-          <div style={{ padding: "0.875rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <div className="skeleton" style={{ height: 18, width: "80%" }} />
-            <div className="skeleton" style={{ height: 14, width: "55%" }} />
-          </div>
+        <div key={i} style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", aspectRatio: "2/3" }}>
+          <div className="skeleton" style={{ width: "100%", height: "100%" }} />
         </div>
       ))}
     </div>
@@ -57,36 +50,72 @@ function SkeletonGrid() {
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 function EmptyState({ hasFilters, onAdd }: { hasFilters: boolean; onAdd: () => void }) {
+  const { t } = useTranslation();
+
   if (hasFilters) {
     return (
       <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
         <p style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>🔍</p>
-        <p style={{ fontWeight: 700, color: "var(--text-secondary)", marginBottom: "0.4rem" }}>
-          Nessuna ricetta trovata
+        <p style={{ fontWeight: 700, color: "var(--text-secondary)", marginBottom: "0.4rem", fontFamily: "var(--font-serif)", fontSize: "1.1rem" }}>
+          {t("search.noResults")}
         </p>
-        <p style={{ fontSize: "0.875rem" }}>Prova con un termine diverso o azzera i filtri</p>
+        <p style={{ fontSize: "0.875rem" }}>{t("search.noResults.hint")}</p>
       </div>
     );
   }
+
   return (
-    <div style={{ textAlign: "center", padding: "4rem 1.5rem", color: "var(--text-muted)" }}>
-      <div style={{ color: "var(--border)", marginBottom: "1.25rem" }}>
-        <IconBook />
+    <div style={{
+      textAlign: "center",
+      padding: "4rem 1.5rem 5rem",
+      color: "var(--text-muted)",
+      maxWidth: 440,
+      margin: "0 auto",
+    }}>
+      {/* Illustrazione decorativa */}
+      <div style={{
+        width: 120, height: 120,
+        margin: "0 auto 2rem",
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, var(--brand-light) 0%, var(--bg-card) 100%)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "3.5rem",
+        boxShadow: "0 8px 32px rgba(181,84,30,0.12)",
+      }}>
+        📖
       </div>
+
       <h2 style={{
         fontFamily: "var(--font-serif)",
-        fontSize: "1.5rem",
+        fontSize: "1.75rem",
         color: "var(--text-primary)",
-        marginBottom: "0.5rem",
+        marginBottom: "0.65rem",
+        lineHeight: 1.2,
       }}>
-        Il tuo libro è ancora vuoto
+        {t("home.empty.title")}
       </h2>
-      <p style={{ fontSize: "0.9rem", maxWidth: 320, margin: "0 auto 1.75rem" }}>
-        Aggiungi la tua prima ricetta incollando qualsiasi testo — convertiamo automaticamente cup, once e libbre.
+      <p style={{ fontSize: "0.925rem", lineHeight: 1.7, marginBottom: "2rem", color: "var(--text-secondary)" }}>
+        {t("home.empty.subtitle")}
       </p>
-      <button className="btn btn-primary" onClick={onAdd} style={{ gap: "0.4rem" }}>
-        <IconPlus /> Aggiungi la prima ricetta
+      <button className="btn btn-primary" onClick={onAdd}
+        style={{ gap: "0.4rem", padding: "0.75rem 1.75rem", fontSize: "1rem" }}>
+        <IconPlus /> {t("home.empty.cta")}
       </button>
+
+      {/* Mini conversioni hint */}
+      <div style={{
+        marginTop: "2.5rem",
+        padding: "1rem 1.25rem",
+        background: "var(--brand-light)",
+        borderRadius: "var(--radius-md)",
+        fontSize: "0.82rem",
+        color: "var(--brand-dark)",
+        lineHeight: 1.7,
+        textAlign: "left",
+      }}>
+        <strong>Conversioni automatiche:</strong><br />
+        1 cup → 240 ml · 1 tbsp → 15 ml · 1 oz → 28 g · 1 lb → 454 g
+      </div>
     </div>
   );
 }
@@ -98,6 +127,7 @@ const DEFAULT_FILTERS: SearchFilters = { query: "" };
 export default function HomePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation();
 
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const [toast, setToast]     = useState<string | null>(null);
@@ -144,22 +174,19 @@ export default function HomePage() {
     e.target.value = "";
   }, [handleImport]);
 
-  // ─── Drag & Drop globale sulla pagina ─────────────────────────────────────
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
+  const handleExport = useCallback(async () => {
+    await exportBook();
+    setToast("📥 Backup esportato");
   }, []);
 
+  // ─── Drag & Drop ──────────────────────────────────────────────────────────
+
+  const handleDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragging(false);
-    }
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false);
   }, []);
-
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+    e.preventDefault(); setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) handleImport(file);
   }, [handleImport]);
@@ -168,7 +195,7 @@ export default function HomePage() {
 
   return (
     <div
-      style={{ maxWidth: 900, margin: "0 auto", padding: "1.25rem 1rem 3rem", width: "100%" }}
+      style={{ maxWidth: 960, margin: "0 auto", padding: "0 1rem 3rem", width: "100%" }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -177,7 +204,7 @@ export default function HomePage() {
       {isDragging && (
         <div style={{
           position: "fixed", inset: 0, zIndex: 60,
-          background: "rgba(181,84,30,0.12)",
+          background: "rgba(181,84,30,0.10)",
           border: "3px dashed var(--brand)",
           display: "flex", alignItems: "center", justifyContent: "center",
           backdropFilter: "blur(2px)",
@@ -191,68 +218,62 @@ export default function HomePage() {
             boxShadow: "var(--shadow-modal)",
           }}>
             <p style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📂</p>
-            <p style={{ fontWeight: 700, color: "var(--brand)", fontSize: "1.05rem" }}>
-              Rilascia per importare
-            </p>
+            <p style={{ fontWeight: 700, color: "var(--brand)", fontSize: "1.05rem" }}>Rilascia per importare</p>
           </div>
         </div>
       )}
 
-      {/* Header row */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: "1.25rem",
-        gap: "0.75rem",
-        flexWrap: "wrap",
-      }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "clamp(1.3rem, 4vw, 1.75rem)" }}>
-            Le mie ricette
-          </h1>
-          {allRecipes.length > 0 && (
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      {allRecipes.length > 0 ? (
+        <div style={{
+          padding: "1.5rem 0 1.25rem",
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: "1rem",
+          flexWrap: "wrap",
+          borderBottom: "1px solid var(--border)",
+          marginBottom: "1.5rem",
+        }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: "clamp(1.4rem, 4vw, 1.9rem)", letterSpacing: "-0.02em" }}>
+              Le mie ricette
+            </h1>
             <p style={{ margin: "0.2rem 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
               {allRecipes.length === 1 ? "1 ricetta nel libro" : `${allRecipes.length} ricette nel libro`}
             </p>
-          )}
+          </div>
+
+          <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+            {/* Esporta backup */}
+            {allRecipes.length > 0 && (
+              <button className="btn btn-ghost" onClick={handleExport} title="Esporta backup JSON"
+                style={{ gap: "0.35rem", padding: "0.5rem 0.75rem", fontSize: "0.825rem" }}>
+                <IconDownload />
+                <span className="sm-show">Backup</span>
+              </button>
+            )}
+
+            {/* Importa */}
+            <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}
+              disabled={importing} title="Importa ricette da JSON"
+              style={{ gap: "0.35rem", padding: "0.5rem 0.875rem", fontSize: "0.825rem" }}>
+              <IconUpload />
+              <span>{importing ? "Importo…" : "Importa"}</span>
+            </button>
+            <input ref={fileInputRef} type="file" accept=".json,application/json"
+              onChange={handleFileInput} style={{ display: "none" }} />
+
+            {/* Aggiungi */}
+            <button className="btn btn-primary" onClick={() => navigate("/aggiungi")}
+              style={{ gap: "0.4rem" }}>
+              <IconPlus /> Aggiungi
+            </button>
+          </div>
         </div>
+      ) : null}
 
-        <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-          {/* Importa */}
-          <button
-            className="btn btn-secondary"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            title="Importa libro JSON"
-            style={{ gap: "0.4rem", padding: "0.5rem 0.875rem" }}
-          >
-            <IconUpload />
-            <span style={{ fontSize: "0.875rem" }}>
-              {importing ? "Importo…" : "Importa"}
-            </span>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            onChange={handleFileInput}
-            style={{ display: "none" }}
-          />
-
-          {/* Aggiungi */}
-          <button
-            className="btn btn-primary"
-            onClick={() => navigate("/aggiungi")}
-            style={{ gap: "0.4rem" }}
-          >
-            <IconPlus />
-            <span>Aggiungi</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Search + filtri */}
+      {/* ── Search + filtri ──────────────────────────────────────────────── */}
       {allRecipes.length > 0 && (
         <div style={{ marginBottom: "1.5rem" }}>
           <SearchBar
@@ -264,45 +285,44 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Griglia ricette */}
+      {/* ── Griglia ricette ──────────────────────────────────────────────── */}
       {loading ? (
         <SkeletonGrid />
       ) : recipes.length === 0 ? (
-        <EmptyState
-          hasFilters={hasActiveFilters}
-          onAdd={() => navigate("/aggiungi")}
-        />
+        <EmptyState hasFilters={hasActiveFilters} onAdd={() => navigate("/aggiungi")} />
       ) : (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-          gap: "1rem",
-          animation: "fadeIn 0.2s ease-out",
-        }}>
+        <div className="recipe-grid" style={{ animation: "fadeIn 0.2s ease-out" }}>
           {recipes.map((recipe) => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              onToggleStar={toggleStar}
-            />
+            <RecipeCard key={recipe.id} recipe={recipe} onToggleStar={toggleStar} />
           ))}
         </div>
       )}
 
-      {/* Hint drag & drop (solo se ci sono già ricette) */}
+      {/* Hint drag & drop */}
       {!loading && allRecipes.length > 0 && (
-        <p style={{
-          textAlign: "center",
-          fontSize: "0.78rem",
-          color: "var(--text-muted)",
-          marginTop: "2rem",
-        }}>
-          Trascina un file <code>.json</code> in questa pagina per importare ricette
+        <p style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2rem" }}>
+          Trascina un file <code style={{ background: "var(--border)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.json</code> per importare ricette
         </p>
       )}
 
       {/* Toast */}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+
+      <style>{`
+        @media (min-width: 480px) { .sm-show { display: inline !important; } }
+        .sm-show { display: none; }
+        .recipe-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+          gap: 1rem;
+        }
+        @media (min-width: 480px) {
+          .recipe-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+        }
+        @media (min-width: 768px) {
+          .recipe-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; }
+        }
+      `}</style>
     </div>
   );
 }
