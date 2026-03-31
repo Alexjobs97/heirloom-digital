@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
+import { LangProvider, useLang } from "./i18n/LangContext";
 import { useTranslation } from "./i18n/useTranslation";
 import { unlockAudio } from "./lib/audio";
 
@@ -20,46 +21,50 @@ function IconSun()     { return <svg viewBox="0 0 24 24" fill="none" stroke="cur
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-function Header({ dark, onToggleDark, lang, onToggleLang }: {
+function Header({ dark, onToggleDark }: {
   dark: boolean;
   onToggleDark: () => void;
-  lang: "it" | "ja";
-  onToggleLang: () => void;
 }) {
   const { t } = useTranslation();
+  const { lang, toggleLang } = useLang();
   const location = useLocation();
   if (location.pathname.startsWith("/cucina/")) return null;
 
   return (
     <header style={{
-      background: "var(--bg-card)",
-      borderBottom: "1px solid var(--border)",
       position: "sticky", top: 0, zIndex: 40,
       paddingTop: "env(safe-area-inset-top)",
     }}>
       <div style={{
-        maxWidth: 860, margin: "0 auto", padding: "0 1rem",
-        height: 56, display: "flex", alignItems: "center",
+        maxWidth: 920, margin: "0 auto", padding: "0 1.25rem",
+        height: 58, display: "flex", alignItems: "center",
         justifyContent: "space-between", gap: "0.5rem",
       }}>
         {/* Logo */}
-        <NavLink to="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <span style={{ fontFamily: "var(--font-serif)", fontSize: "1.2rem", fontWeight: 700, color: "var(--brand)", letterSpacing: "-0.01em" }}>
+        <NavLink to="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "0.45rem" }}>
+          <span style={{
+            fontFamily: "var(--font-serif)", fontSize: "1.25rem", fontWeight: 700,
+            color: "var(--brand)", letterSpacing: "-0.01em",
+          }}>
             Heirloom
           </span>
-          <span style={{ fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginTop: 2 }}>
+          <span style={{
+            fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.12em",
+            textTransform: "uppercase", color: "var(--text-muted)", marginTop: 3,
+          }}>
             Digital
           </span>
         </NavLink>
 
         {/* Nav */}
-        <nav style={{ display: "flex", alignItems: "center", gap: "0.2rem" }}>
+        <nav style={{ display: "flex", alignItems: "center", gap: "0.15rem" }}>
           {[
             { to: "/",         label: t("nav.home"),    icon: <IconBook /> },
             { to: "/aggiungi", label: t("nav.add"),     icon: <IconPlus /> },
             { to: "/planner",  label: t("nav.planner"), icon: <IconCalendar /> },
           ].map(({ to, label, icon }) => (
-            <NavLink key={to} to={to} end={to === "/"} title={label}
+            <NavLink key={to} to={to} end={to === "/"}
+              title={label}
               style={({ isActive }) => ({
                 display: "flex", alignItems: "center", gap: "0.3rem",
                 padding: "0.4rem 0.6rem", borderRadius: "var(--radius-md)",
@@ -74,36 +79,49 @@ function Header({ dark, onToggleDark, lang, onToggleLang }: {
           ))}
 
           {/* Language toggle */}
-          <button onClick={onToggleLang} title="Cambia lingua / 言語切替"
+          <button
+            onClick={toggleLang}
+            title="Cambia lingua / 言語切替"
             style={{
-              background: "none", border: "1.5px solid var(--border)",
-              borderRadius: "var(--radius-md)", cursor: "pointer",
-              color: "var(--text-secondary)", padding: "0.3rem 0.5rem",
+              background: "none",
+              border: "1.5px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+              padding: "0.3rem 0.6rem",
               fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.03em",
               transition: "all 0.15s", display: "flex", alignItems: "center",
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--brand)"; (e.currentTarget as HTMLElement).style.color = "var(--brand)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--brand)";
+              (e.currentTarget as HTMLElement).style.color = "var(--brand)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+              (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+            }}
           >
             {lang === "it" ? "🇯🇵 JP" : "🇮🇹 IT"}
           </button>
 
           {/* Dark mode */}
-          <button onClick={onToggleDark}
+          <button
+            onClick={onToggleDark}
+            aria-label={dark ? "Modalità chiara" : "Modalità scura"}
             style={{
               background: "none", border: "none", cursor: "pointer",
               color: "var(--text-secondary)", display: "flex",
               alignItems: "center", padding: "0.4rem 0.5rem",
               borderRadius: "var(--radius-md)", transition: "color 0.15s",
             }}
-            aria-label={dark ? "Modalità chiara" : "Modalità scura"}>
+          >
             {dark ? <IconSun /> : <IconMoon />}
           </button>
         </nav>
       </div>
 
       <style>{`
-        @media (min-width: 480px) { .sm-show { display: inline !important; } }
+        @media (min-width: 500px) { .sm-show { display: inline !important; } }
       `}</style>
     </header>
   );
@@ -112,13 +130,21 @@ function Header({ dark, onToggleDark, lang, onToggleLang }: {
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 
 function NotFound() {
+  const { t } = useTranslation();
   return (
     <div style={{ textAlign: "center", padding: "4rem 1rem", color: "var(--text-muted)" }}>
       <p style={{ fontSize: "3rem" }}>🍽️</p>
-      <h2 style={{ fontFamily: "var(--font-serif)", color: "var(--text-primary)" }}>Pagina non trovata</h2>
+      <h2 style={{ fontFamily: "var(--font-serif)", color: "var(--text-primary)" }}>
+        {t("error.notFound")}
+      </h2>
       <NavLink to="/"
-        style={{ display: "inline-block", marginTop: "1.5rem", padding: "0.65rem 1.5rem", background: "var(--brand)", color: "#fff", borderRadius: "var(--radius-md)", fontWeight: 700, textDecoration: "none" }}>
-        Torna alle ricette
+        style={{
+          display: "inline-block", marginTop: "1.5rem",
+          padding: "0.65rem 1.5rem", background: "var(--brand)",
+          color: "#fff", borderRadius: "var(--radius-md)",
+          fontWeight: 700, textDecoration: "none",
+        }}>
+        {t("misc.back")}
       </NavLink>
     </div>
   );
@@ -127,11 +153,9 @@ function NotFound() {
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 
 function AppShell() {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
-  const [lang, setLang] = useState<"it" | "ja">(() => {
-    try { return (localStorage.getItem("heirloom_lang") as "it" | "ja") || "it"; }
-    catch { return "it"; }
-  });
+  const [dark, setDark] = useState(() =>
+    document.documentElement.classList.contains("dark")
+  );
 
   const toggleDark = useCallback(() => {
     const next = !dark;
@@ -139,14 +163,6 @@ function AppShell() {
     document.documentElement.classList.toggle("dark", next);
     try { localStorage.setItem("heirloom_dark", String(next)); } catch {}
   }, [dark]);
-
-  const toggleLang = useCallback(() => {
-    const next: "it" | "ja" = lang === "it" ? "ja" : "it";
-    setLang(next);
-    try { localStorage.setItem("heirloom_lang", next); } catch {}
-    // Ricarica per applicare tutte le traduzioni
-    window.location.reload();
-  }, [lang]);
 
   useEffect(() => {
     const unlock = () => unlockAudio();
@@ -156,16 +172,16 @@ function AppShell() {
 
   return (
     <>
-      <Header dark={dark} onToggleDark={toggleDark} lang={lang} onToggleLang={toggleLang} />
+      <Header dark={dark} onToggleDark={toggleDark} />
       <main style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <Routes>
-          <Route path="/"               element={<HomePage />} />
-          <Route path="/aggiungi"       element={<AddRecipePage />} />
-          <Route path="/ricette/:id"    element={<RecipeDetailPage />} />
+          <Route path="/"                    element={<HomePage />} />
+          <Route path="/aggiungi"            element={<AddRecipePage />} />
+          <Route path="/ricette/:id"         element={<RecipeDetailPage />} />
           <Route path="/ricette/:id/modifica" element={<EditRecipePage />} />
-          <Route path="/cucina/:id"     element={<CookingModePage />} />
-          <Route path="/planner"        element={<PlannerPage />} />
-          <Route path="*"               element={<NotFound />} />
+          <Route path="/cucina/:id"          element={<CookingModePage />} />
+          <Route path="/planner"             element={<PlannerPage />} />
+          <Route path="*"                    element={<NotFound />} />
         </Routes>
       </main>
     </>
@@ -174,8 +190,10 @@ function AppShell() {
 
 export default function App() {
   return (
-    <HashRouter>
-      <AppShell />
-    </HashRouter>
+    <LangProvider>
+      <HashRouter>
+        <AppShell />
+      </HashRouter>
+    </LangProvider>
   );
 }

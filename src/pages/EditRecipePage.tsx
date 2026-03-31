@@ -1,6 +1,7 @@
 /**
- * EditRecipePage.tsx — Modifica una ricetta esistente.
- * Riusa lo stesso form di AddRecipePage, pre-popolato con i dati salvati.
+ * EditRecipePage.tsx v2 — Modifica ricetta esistente.
+ * FIX: preserva recipe.ja quando si salvano le modifiche (non lo cancella).
+ * Usa useTranslation() per tutte le etichette.
  */
 
 import { useState, useCallback } from "react";
@@ -8,6 +9,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import type { Ingredient, Recipe } from "../types";
 import { useRecipe, useRecipes } from "../hooks/useRecipes";
 import { generateId } from "../lib/scaling";
+import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
 
@@ -19,18 +21,12 @@ function IconImage() { return <svg viewBox="0 0 24 24" fill="none" stroke="curre
 
 // ─── Image Upload ─────────────────────────────────────────────────────────────
 
-function ImageUpload({
-  current,
-  onChange,
-}: {
-  current?: string;
-  onChange: (dataUrl: string | undefined) => void;
-}) {
+function ImageUpload({ current, onChange }: { current?: string; onChange: (url: string | undefined) => void }) {
+  const { t } = useTranslation();
+
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-
+    if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => onChange(reader.result as string);
     reader.readAsDataURL(file);
@@ -41,14 +37,9 @@ function ImageUpload({
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       <label>Foto della ricetta</label>
       <div style={{
-        position: "relative",
-        width: "100%",
-        aspectRatio: "16/5",
-        borderRadius: "var(--radius-md)",
-        overflow: "hidden",
-        border: "2px dashed var(--border)",
-        background: "var(--bg-page)",
-        cursor: "pointer",
+        position: "relative", width: "100%", aspectRatio: "16/5",
+        borderRadius: "var(--radius-md)", overflow: "hidden",
+        border: "2px dashed var(--border)", background: "var(--bg-page)", cursor: "pointer",
         transition: "border-color 0.15s",
       }}
         onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
@@ -62,20 +53,12 @@ function ImageUpload({
             <span style={{ fontSize: "0.8rem" }}>Clicca per aggiungere una foto</span>
           </div>
         )}
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleFile}
-          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
-        />
+        <input type="file" accept="image/*" onChange={handleFile}
+          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
       </div>
       {current && (
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => onChange(undefined)}
-          style={{ fontSize: "0.8rem", color: "var(--error)", alignSelf: "flex-start" }}
-        >
+        <button type="button" className="btn btn-ghost" onClick={() => onChange(undefined)}
+          style={{ fontSize: "0.8rem", color: "var(--error)", alignSelf: "flex-start" }}>
           Rimuovi foto
         </button>
       )}
@@ -93,12 +76,7 @@ interface EditableIng {
 }
 
 function toEditable(ing: Ingredient): EditableIng {
-  return {
-    _id:  ing.id ?? generateId(),
-    qty:  String(ing.qty),
-    unit: ing.unit,
-    name: ing.displayName,
-  };
+  return { _id: ing.id ?? generateId(), qty: String(ing.qty), unit: ing.unit, name: ing.displayName };
 }
 
 function fromEditable(ing: EditableIng): Ingredient {
@@ -119,19 +97,20 @@ export default function EditRecipePage() {
   const navigate = useNavigate();
   const { recipe, loading } = useRecipe(id);
   const { updateRecipe }    = useRecipes();
+  const { t } = useTranslation();
 
-  // Form state (inizializzato dal recipe caricato)
-  const [title,    setTitle]   = useState("");
-  const [yield_,   setYield]   = useState(4);
-  const [time,     setTime]    = useState(0);
-  const [tags,     setTags]    = useState("");
-  const [notes,    setNotes]   = useState("");
-  const [source,   setSource]  = useState("");
+  // Form state
+  const [title,    setTitle]    = useState("");
+  const [yield_,   setYield]    = useState(4);
+  const [time,     setTime]     = useState(0);
+  const [tags,     setTags]     = useState("");
+  const [notes,    setNotes]    = useState("");
+  const [source,   setSource]   = useState("");
   const [coverImg, setCoverImg] = useState<string | undefined>(undefined);
-  const [steps,    setSteps]   = useState<string[]>([""]);
+  const [steps,    setSteps]    = useState<string[]>([""]);
   const [ingredients, setIngredients] = useState<EditableIng[]>([]);
-  const [saving,   setSaving]  = useState(false);
-  const [inited,   setInited]  = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [inited,   setInited]   = useState(false);
 
   // Inizializza il form una volta sola quando recipe arriva
   if (recipe && !inited) {
@@ -147,46 +126,30 @@ export default function EditRecipePage() {
     setInited(true);
   }
 
-  // ── Ingredienti ─────────────────────────────────────────────────────────────
-
-  const updateIng = (id: string, field: keyof EditableIng, value: string) =>
+  const updateIng  = (id: string, field: keyof EditableIng, value: string) =>
     setIngredients((prev) => prev.map((i) => i._id === id ? { ...i, [field]: value } : i));
-
-  const removeIng = (id: string) =>
-    setIngredients((prev) => prev.filter((i) => i._id !== id));
-
-  const addIng = () =>
-    setIngredients((prev) => [...prev, { _id: generateId(), qty: "", unit: "", name: "" }]);
-
-  // ── Passi ────────────────────────────────────────────────────────────────────
-
-  const updateStep = (i: number, val: string) =>
-    setSteps((prev) => prev.map((s, j) => j === i ? val : s));
-
-  const removeStep = (i: number) =>
-    setSteps((prev) => prev.filter((_, j) => j !== i));
-
-  const addStep = () => setSteps((prev) => [...prev, ""]);
-
-  // ── Salva ────────────────────────────────────────────────────────────────────
+  const removeIng  = (id: string) => setIngredients((prev) => prev.filter((i) => i._id !== id));
+  const addIng     = () => setIngredients((prev) => [...prev, { _id: generateId(), qty: "", unit: "", name: "" }]);
+  const updateStep = (i: number, val: string) => setSteps((prev) => prev.map((s, j) => j === i ? val : s));
+  const removeStep = (i: number) => setSteps((prev) => prev.filter((_, j) => j !== i));
+  const addStep    = () => setSteps((prev) => [...prev, ""]);
 
   const handleSave = useCallback(async () => {
     if (!recipe) return;
     setSaving(true);
     try {
       const updated: Recipe = {
-        ...recipe,
+        ...recipe,               // ← preserva recipe.ja e tutti gli altri campi
         title:       title.trim() || recipe.title,
         yield:       Math.max(1, yield_),
         totalTime:   Math.max(0, time),
-        tags:        tags.split(",").map((t) => t.trim()).filter(Boolean),
+        tags:        tags.split(",").map((tg) => tg.trim()).filter(Boolean),
         notes:       notes.trim() || undefined,
         source:      source.trim() || undefined,
         coverImage:  coverImg,
         steps:       steps.map((s) => s.trim()).filter(Boolean),
-        ingredients: ingredients
-          .filter((i) => i.name.trim())
-          .map(fromEditable),
+        ingredients: ingredients.filter((i) => i.name.trim()).map(fromEditable),
+        // recipe.ja viene preservato dallo spread sopra — non viene sovrascritto
       };
       await updateRecipe(updated);
       navigate(`/ricette/${recipe.id}`);
@@ -194,8 +157,6 @@ export default function EditRecipePage() {
       setSaving(false);
     }
   }, [recipe, title, yield_, time, tags, notes, source, coverImg, steps, ingredients, updateRecipe, navigate]);
-
-  // ── Loading ───────────────────────────────────────────────────────────────────
 
   if (loading || !recipe) {
     return (
@@ -207,6 +168,7 @@ export default function EditRecipePage() {
   }
 
   const unitOptions: Array<"ml" | "g" | ""> = ["ml", "g", ""];
+  const hasJa = !!recipe.ja;
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "1.25rem 1rem 4rem" }}>
@@ -214,13 +176,25 @@ export default function EditRecipePage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ gap: "0.3rem", padding: "0.5rem 0.75rem" }}>
-          <IconBack /> Indietro
+          <IconBack /> {t("misc.back")}
         </button>
-        <h1 style={{ margin: 0, flex: 1, fontSize: "clamp(1.2rem, 3vw, 1.6rem)" }}>Modifica ricetta</h1>
+        <h1 style={{ margin: 0, flex: 1, fontSize: "clamp(1.2rem, 3vw, 1.6rem)" }}>{t("detail.edit")}</h1>
+        {hasJa && (
+          <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.55rem", background: "var(--brand-light)", color: "var(--brand-dark)", borderRadius: "var(--radius-full)" }}>
+            🌐 IT + JP
+          </span>
+        )}
         <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ gap: "0.4rem" }}>
-          <IconSave /> {saving ? "Salvataggio…" : "Salva modifiche"}
+          <IconSave /> {saving ? t("review.saving") : t("review.save")}
         </button>
       </div>
+
+      {/* Info banner se bilingue */}
+      {hasJa && (
+        <div style={{ marginBottom: "1.25rem", padding: "0.75rem 1rem", background: "var(--info-bg)", border: "1px solid var(--info)", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--info)" }}>
+          ℹ️ Questa ricetta ha una versione giapponese salvata. Le modifiche qui riguardano solo la versione italiana. La versione JP rimane invariata.
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
@@ -232,23 +206,23 @@ export default function EditRecipePage() {
         {/* Info base */}
         <div className="card" style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
           <div>
-            <label>Titolo</label>
+            <label>{t("review.field.title")}</label>
             <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
             <div>
-              <label>Porzioni</label>
+              <label>{t("review.field.yield")}</label>
               <input className="input" type="number" min={1} max={100} value={yield_}
                 onChange={(e) => setYield(parseInt(e.target.value) || 1)} />
             </div>
             <div>
-              <label>Tempo totale (min)</label>
+              <label>{t("review.field.totalTime")}</label>
               <input className="input" type="number" min={0} value={time}
                 onChange={(e) => setTime(parseInt(e.target.value) || 0)} />
             </div>
           </div>
           <div>
-            <label>Tag (separati da virgola)</label>
+            <label>{t("review.field.tags")}</label>
             <input className="input" value={tags} placeholder="es. veloce, italiana, dolce"
               onChange={(e) => setTags(e.target.value)} />
           </div>
@@ -258,16 +232,16 @@ export default function EditRecipePage() {
               onChange={(e) => setSource(e.target.value)} />
           </div>
           <div>
-            <label>Note personali</label>
+            <label>{t("detail.notes")}</label>
             <textarea className="input" value={notes} placeholder="Varianti, consigli, ricordi…"
               onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 80 }} />
           </div>
         </div>
 
-        {/* Ingredienti */}
+        {/* Ingredienti IT */}
         <div className="card" style={{ padding: "1rem 1.25rem" }}>
           <p style={{ fontWeight: 700, fontSize: "0.85rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            Ingredienti
+            {t("review.field.ingredients")} (IT)
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {ingredients.map((ing) => (
@@ -280,7 +254,7 @@ export default function EditRecipePage() {
                   style={{ padding: "0.4rem 0.3rem", fontSize: "0.875rem" }}>
                   {unitOptions.map((u) => <option key={u} value={u}>{u || "—"}</option>)}
                 </select>
-                <input className="input" placeholder="Ingrediente" value={ing.name}
+                <input className="input" placeholder={t("review.ingredient.name")} value={ing.name}
                   onChange={(e) => updateIng(ing._id, "name", e.target.value)}
                   style={{ padding: "0.4rem 0.5rem", fontSize: "0.875rem" }} />
                 <button onClick={() => removeIng(ing._id)}
@@ -290,16 +264,31 @@ export default function EditRecipePage() {
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost" onClick={addIng}
-            style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem" }}>
-            <IconPlus /> Aggiungi ingrediente
+          <button className="btn btn-ghost" onClick={addIng} style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem" }}>
+            <IconPlus /> {t("review.ingredient.add")}
           </button>
         </div>
 
-        {/* Passi */}
+        {/* Preview ingredienti JP (read-only se esistono) */}
+        {hasJa && recipe.ja && recipe.ja.ingredients.length > 0 && (
+          <details className="card" style={{ padding: "0.875rem 1rem" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", color: "var(--text-muted)", letterSpacing: "0.05em", textTransform: "uppercase", listStyle: "none" }}>
+              ▸ 材料 (JP) — {recipe.ja.ingredients.length} ingredienti · sola lettura
+            </summary>
+            <ul style={{ margin: "0.625rem 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              {recipe.ja.ingredients.map((ing, i) => (
+                <li key={i} style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                  {ing.qty && String(ing.qty) !== "" ? `${ing.qty} ` : ""}{ing.unit || ""} {ing.displayName}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        {/* Passi IT */}
         <div className="card" style={{ padding: "1rem 1.25rem" }}>
           <p style={{ fontWeight: 700, fontSize: "0.85rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            Procedimento
+            {t("review.field.steps")} (IT)
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
             {steps.map((step, i) => (
@@ -317,16 +306,29 @@ export default function EditRecipePage() {
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost" onClick={addStep}
-            style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem" }}>
-            <IconPlus /> Aggiungi passo
+          <button className="btn btn-ghost" onClick={addStep} style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem" }}>
+            <IconPlus /> {t("review.step.add")}
           </button>
         </div>
+
+        {/* Preview passi JP */}
+        {hasJa && recipe.ja && recipe.ja.steps.length > 0 && (
+          <details className="card" style={{ padding: "0.875rem 1rem" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", color: "var(--text-muted)", letterSpacing: "0.05em", textTransform: "uppercase", listStyle: "none" }}>
+              ▸ 作り方 (JP) — {recipe.ja.steps.length} passi · sola lettura
+            </summary>
+            <ol style={{ margin: "0.625rem 0 0", padding: "0 0 0 1.25rem" }}>
+              {recipe.ja.steps.map((s, i) => (
+                <li key={i} style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginBottom: "0.3rem" }}>{s}</li>
+              ))}
+            </ol>
+          </details>
+        )}
 
         {/* Salva bottom */}
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}
           style={{ gap: "0.4rem", alignSelf: "flex-end" }}>
-          <IconSave /> {saving ? "Salvataggio…" : "Salva modifiche"}
+          <IconSave /> {saving ? t("review.saving") : t("review.save")}
         </button>
       </div>
     </div>

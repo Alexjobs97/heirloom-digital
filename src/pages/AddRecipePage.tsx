@@ -1,13 +1,16 @@
 /**
- * AddRecipePage.tsx — Incolla testo + ParseReview + salvataggio.
+ * AddRecipePage.tsx v4 — Incolla testo + ParseReview + salvataggio bilingue.
+ * FIX CRITICO: i dati JP vengono salvati in recipe.ja (RecipeLocale),
+ * non nei vecchi campi titleJa/stepsJa/ingredientsJa che non esistono nel tipo.
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import type { ParsedResult, RawIngredient, Recipe } from "../types";
+import type { ParsedResult, RawIngredient, Recipe, Ingredient } from "../types";
 import { parseRecipe } from "../lib/parser";
 import { useRecipes } from "../hooks/useRecipes";
 import { generateId } from "../lib/scaling";
+import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
 
@@ -17,61 +20,42 @@ function IconSave()  { return <svg viewBox="0 0 24 24" fill="none" stroke="curre
 function IconPlus()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>; }
 function IconTrash() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>; }
 
-// ─── Step 1: Paste area ───────────────────────────────────────────────────────
+// ─── Paste Step ───────────────────────────────────────────────────────────────
 
-function PasteStep({
-  onAnalyze,
-}: {
-  onAnalyze: (text: string) => void;
-}) {
+function PasteStep({ onAnalyze }: { onAnalyze: (text: string) => void }) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { t } = useTranslation();
 
   const handleAnalyze = () => {
     if (!text.trim()) return;
     setLoading(true);
-    // Piccolo timeout per mostrare lo stato di caricamento
-    setTimeout(() => {
-      onAnalyze(text);
-      setLoading(false);
-    }, 120);
+    setTimeout(() => { onAnalyze(text); setLoading(false); }, 120);
   };
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "1.5rem 1rem 3rem" }}>
-      <h1 style={{ marginBottom: "0.35rem" }}>Aggiungi una ricetta</h1>
-      <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "0.925rem" }}>
-        Incolla il testo di qualsiasi ricetta — anche in inglese con tazze e once.
-        Convertiamo tutto automaticamente in ml e grammi.
+      <h1 style={{ marginBottom: "0.35rem" }}>{t("add.title")}</h1>
+      <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "0.925rem", lineHeight: 1.6 }}>
+        Incolla una ricetta in qualsiasi formato. Supporta il formato bilingue Gemini con blocchi{" "}
+        <code style={{ background: "var(--brand-light)", padding: "0.1rem 0.35rem", borderRadius: 4, fontSize: "0.85em" }}>
+          === IT === / === JP ===
+        </code>
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <textarea
-          ref={textareaRef}
           className="input"
-          placeholder={[
-            "Incolla qui la tua ricetta (qualsiasi formato)…",
-            "",
-            "Funziona con:",
-            "• Ricette da siti e blog",
-            "• Testo libero copiato da PDF",
-            "• Ricette americane (1 cup farina → 240 ml)",
-            "• Qualsiasi lingua",
-          ].join("\n")}
+          placeholder={`Incolla qui la tua ricetta…\n\nFormato bilingue Gemini:\n=== IT ===\n🍽️  Ricetta …\nINGREDIENTI\n  • 200 ml latte\nPROCEDIMENTO\n  1. …\n\n=== JP ===\n🍽️  レシピ …`}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          style={{ minHeight: 320, fontSize: "0.9rem", lineHeight: 1.65, fontFamily: "var(--font-mono, monospace)" }}
+          style={{ minHeight: 320, fontSize: "0.875rem", lineHeight: 1.7, fontFamily: "monospace" }}
           autoFocus
         />
-
         <div style={{ display: "flex", gap: "0.625rem", justifyContent: "flex-end" }}>
           {text && (
-            <button
-              className="btn btn-ghost"
-              onClick={() => setText("")}
-            >
-              Cancella
+            <button className="btn btn-ghost" onClick={() => setText("")}>
+              {t("add.paste.clear")}
             </button>
           )}
           <button
@@ -81,20 +65,15 @@ function PasteStep({
             style={{ gap: "0.4rem" }}
           >
             <IconWand />
-            {loading ? "Analisi in corso…" : "Analizza ricetta"}
+            {loading ? t("add.paste.analyzing") : t("add.paste.analyze")}
           </button>
         </div>
       </div>
 
-      {/* Hint */}
       <div style={{
-        marginTop: "1.5rem",
-        padding: "1rem",
-        background: "var(--brand-light)",
-        borderRadius: "var(--radius-md)",
-        fontSize: "0.85rem",
-        color: "var(--brand-dark)",
-        lineHeight: 1.6,
+        marginTop: "1.5rem", padding: "1rem",
+        background: "var(--brand-light)", borderRadius: "var(--radius-md)",
+        fontSize: "0.85rem", color: "var(--brand-dark)", lineHeight: 1.65,
       }}>
         <strong>Conversioni automatiche:</strong> 1 cup → 240 ml · 1 tbsp → 15 ml ·
         1 tsp → 5 ml · 1 oz → 28 g · 1 lb → 454 g
@@ -103,115 +82,118 @@ function PasteStep({
   );
 }
 
-// ─── Step 2: ParseReview ──────────────────────────────────────────────────────
+// ─── Helpers conversione ingredienti ─────────────────────────────────────────
 
-interface EditableIngredient extends RawIngredient {
-  _id: string;
+interface EditableIng extends RawIngredient { _id: string; }
+
+function toEditable(ing: RawIngredient): EditableIng {
+  return { ...ing, _id: generateId() };
 }
 
+function fromEditable(ing: EditableIng): Ingredient {
+  const qtyNum = typeof ing.qty === "number" ? ing.qty
+    : parseFloat(String(ing.qty).replace(",", "."));
+  return {
+    id:          generateId(),
+    qty:         isNaN(qtyNum) ? (ing.qty || "q.b.") : qtyNum,
+    unit:        (["ml", "g"].includes(ing.unit) ? ing.unit : "") as "ml" | "g" | "",
+    displayName: ing.name.trim(),
+    canonicalId: ing.canonicalId || ing.name.trim().toLowerCase(),
+  };
+}
+
+// ─── ParseReview ──────────────────────────────────────────────────────────────
+
 function ParseReview({
-  parsed,
-  originalText,
-  onSave,
-  onBack,
+  parsed, originalText, onSave, onBack,
 }: {
   parsed: ParsedResult;
   originalText: string;
-  onSave: (recipe: Omit<Recipe, "id" | "createdAt">) => Promise<void>;
+  onSave: (r: Omit<Recipe, "id" | "createdAt">) => Promise<void>;
   onBack: () => void;
 }) {
-  const [title,    setTitle]    = useState(parsed.title);
-  const [yield_,   setYield]    = useState(parsed.yield);
-  const [time,     setTime]     = useState(parsed.totalTime);
-  const [steps,    setSteps]    = useState<string[]>(parsed.steps.length ? parsed.steps : [""]);
-  const [tags,     setTags]     = useState(parsed.tags.join(", "));
-  const [saving,   setSaving]   = useState(false);
+  const { t } = useTranslation();
 
-  const [ingredients, setIngredients] = useState<EditableIngredient[]>(() =>
-    parsed.ingredients.map((ing) => ({ ...ing, _id: generateId() }))
+  // Dati IT (editabili)
+  const [title,  setTitle]  = useState(parsed.title);
+  const [yield_, setYield]  = useState(parsed.yield);
+  const [time,   setTime]   = useState(parsed.totalTime);
+  const [steps,  setSteps]  = useState<string[]>(parsed.steps.length ? parsed.steps : [""]);
+  const [tags,   setTags]   = useState(parsed.tags.join(", "));
+  const [saving, setSaving] = useState(false);
+  const [ingredients, setIngredients] = useState<EditableIng[]>(() =>
+    parsed.ingredients.map(toEditable)
   );
 
-  // ── Ingredienti ─────────────────────────────────────────────────────────────
+  // Dati JP (presenti se parsed.isBilingual === true)
+  const jaData = parsed.ja;
+  const hasBilingual = parsed.isBilingual && !!jaData;
 
-  const updateIngredient = (id: string, field: string, value: string | number) => {
-    setIngredients((prev) =>
-      prev.map((ing) => (ing._id === id ? { ...ing, [field]: value } : ing))
-    );
-  };
+  const unitOptions: Array<"ml" | "g" | ""> = ["ml", "g", ""];
 
-  const removeIngredient = (id: string) => {
-    setIngredients((prev) => prev.filter((i) => i._id !== id));
-  };
-
-  const addIngredient = () => {
-    setIngredients((prev) => [
-      ...prev,
-      { _id: generateId(), raw: "", qty: "", unit: "", name: "", canonicalId: "" },
-    ]);
-  };
-
-  // ── Passi ────────────────────────────────────────────────────────────────────
-
-  const updateStep = (i: number, val: string) =>
-    setSteps((prev) => prev.map((s, j) => (j === i ? val : s)));
-
-  const removeStep = (i: number) =>
-    setSteps((prev) => prev.filter((_, j) => j !== i));
-
-  const addStep = () => setSteps((prev) => [...prev, ""]);
-
-  // ── Salvataggio ──────────────────────────────────────────────────────────────
+  const updateIng  = (id: string, field: string, value: string) =>
+    setIngredients((p) => p.map((i) => i._id === id ? { ...i, [field]: value } : i));
+  const removeIng  = (id: string) => setIngredients((p) => p.filter((i) => i._id !== id));
+  const addIng     = () => setIngredients((p) => [...p, { _id: generateId(), raw: "", qty: "", unit: "", name: "", canonicalId: "" }]);
+  const updateStep = (i: number, v: string) => setSteps((p) => p.map((s, j) => j === i ? v : s));
+  const removeStep = (i: number) => setSteps((p) => p.filter((_, j) => j !== i));
+  const addStep    = () => setSteps((p) => [...p, ""]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const recipe: Omit<Recipe, "id" | "createdAt"> = {
-        title:      title.trim() || "Nuova ricetta",
-        yield:      Math.max(1, yield_),
-        totalTime:  Math.max(0, time),
-        language:   parsed.language,
-        tags:       tags.split(",").map((t) => t.trim()).filter(Boolean),
-        steps:      steps.map((s) => s.trim()).filter(Boolean),
-        ingredients: ingredients
+      const itIngredients = ingredients.filter((i) => i.name.trim()).map(fromEditable);
+      const itSteps = steps.map((s) => s.trim()).filter(Boolean);
+
+      // Costruisce il campo recipe.ja se esistono dati bilingui
+      const jaLocale = hasBilingual && jaData ? {
+        title:       jaData.title,
+        ingredients: jaData.ingredients
           .filter((i) => i.name.trim())
-          .map(({ _id: _ignored, ...rest }) => ({
-            id:          generateId(),
-            qty:         typeof rest.qty === "number" ? rest.qty : (rest.qty || "q.b."),
-            unit:        (rest.unit === "ml" || rest.unit === "g" ? rest.unit : "") as "ml" | "g" | "",
-            displayName: rest.name.trim(),
-            canonicalId: rest.canonicalId || rest.name.trim().toLowerCase(),
-          })),
+          .map((ri) => fromEditable({ ...ri, _id: generateId() })),
+        steps: jaData.steps.filter(Boolean),
+      } : undefined;
+
+      const recipe: Omit<Recipe, "id" | "createdAt"> = {
+        title:       title.trim() || "Nuova ricetta",
+        yield:       Math.max(1, yield_),
+        totalTime:   Math.max(0, time),
+        language:    "it",
+        tags:        tags.split(",").map((tg) => tg.trim()).filter(Boolean),
+        steps:       itSteps,
+        ingredients: itIngredients,
+        // ↓ Salva nel campo ja (RecipeLocale) — l'unico riconosciuto dal tipo Recipe
+        ...(jaLocale ? { ja: jaLocale } : {}),
       };
+
       await onSave(recipe);
     } finally {
       setSaving(false);
     }
   };
 
-  const unitOptions: Array<"ml" | "g" | ""> = ["ml", "g", ""];
-
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: "1.25rem 1rem 4rem" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <button className="btn btn-ghost" onClick={onBack} style={{ gap: "0.3rem", padding: "0.5rem 0.75rem" }}>
-          <IconBack /> Indietro
+          <IconBack /> {t("misc.back")}
         </button>
-        <h1 style={{ margin: 0, fontSize: "clamp(1.2rem, 3vw, 1.6rem)", flex: 1 }}>
-          Verifica e modifica
+        <h1 style={{ margin: 0, fontSize: "clamp(1.2rem,3vw,1.6rem)", flex: 1 }}>
+          {t("review.title")}
         </h1>
-        <button
-          className="btn btn-primary"
-          onClick={handleSave}
-          disabled={saving}
-          style={{ gap: "0.4rem" }}
-        >
-          <IconSave />
-          {saving ? "Salvataggio…" : "Salva nel libro"}
+        {hasBilingual && (
+          <span style={{
+            fontSize: "0.72rem", fontWeight: 700, padding: "0.25rem 0.65rem",
+            background: "var(--brand-light)", color: "var(--brand-dark)",
+            borderRadius: "var(--radius-full)", letterSpacing: "0.05em",
+          }}>🌐 IT + JP</span>
+        )}
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ gap: "0.4rem" }}>
+          <IconSave /> {saving ? t("review.saving") : t("review.save")}
         </button>
       </div>
 
-      {/* Warning conversioni */}
       {parsed.warnings.length > 0 && (
         <div className="warning-box" style={{ marginBottom: "1.25rem" }}>
           <strong>⚠ Attenzione:</strong>
@@ -221,46 +203,41 @@ function ParseReview({
         </div>
       )}
 
-      {/* Layout a due colonne su desktop */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(0,1fr) minmax(0,1.4fr)",
-        gap: "1.5rem",
-        alignItems: "start",
-      }}
+      <div
+        style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.4fr)", gap: "1.5rem", alignItems: "start" }}
         className="parse-review-grid"
       >
-        {/* Colonna sx: testo originale */}
+        {/* Testo originale */}
         <div>
           <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.5rem" }}>
             Testo originale
           </p>
           <div style={{
-            background: "var(--bg-page)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            padding: "1rem",
-            maxHeight: 520,
-            overflowY: "auto",
-            fontSize: "0.82rem",
-            lineHeight: 1.7,
-            whiteSpace: "pre-wrap",
-            color: "var(--text-secondary)",
-            fontFamily: "var(--font-mono, monospace)",
+            background: "var(--bg-page)", border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)", padding: "1rem",
+            maxHeight: 520, overflowY: "auto", fontSize: "0.82rem", lineHeight: 1.7,
+            whiteSpace: "pre-wrap", color: "var(--text-secondary)", fontFamily: "monospace",
           }}>
             {originalText}
           </div>
         </div>
 
-        {/* Colonna dx: form editabile */}
+        {/* Form editabile */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
           {/* Titolo + meta */}
           <div className="card" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
             <div>
-              <label>Titolo</label>
+              <label>Titolo (IT)</label>
               <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
+            {hasBilingual && jaData?.title && (
+              <div>
+                <label style={{ color: "var(--text-muted)" }}>タイトル (JP — auto)</label>
+                <input className="input" value={jaData.title} readOnly
+                  style={{ opacity: 0.65, background: "var(--bg-page)" }} />
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
               <div>
                 <label>Porzioni</label>
@@ -280,155 +257,115 @@ function ParseReview({
             </div>
           </div>
 
-          {/* Ingredienti */}
+          {/* Ingredienti IT */}
           <div className="card" style={{ padding: "1rem" }}>
-            <p style={{ fontWeight: 700, fontSize: "0.9rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.03em" }}>
-              INGREDIENTI
+            <p style={{ fontWeight: 700, fontSize: "0.85rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Ingredienti (IT)
             </p>
-
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {ingredients.map((ing) => (
                 <div key={ing._id} style={{ display: "grid", gridTemplateColumns: "70px 60px 1fr auto", gap: "0.375rem", alignItems: "center" }}>
-                  <input
-                    className="input"
-                    placeholder="Qtà"
-                    value={String(ing.qty)}
-                    onChange={(e) => updateIngredient(ing._id, "qty", e.target.value)}
-                    style={{ padding: "0.4rem 0.5rem", fontSize: "0.875rem" }}
-                  />
-                  <select
-                    className="input"
-                    value={ing.unit}
-                    onChange={(e) => updateIngredient(ing._id, "unit", e.target.value)}
-                    style={{ padding: "0.4rem 0.3rem", fontSize: "0.875rem" }}
-                  >
-                    {unitOptions.map((u) => (
-                      <option key={u} value={u}>{u || "—"}</option>
-                    ))}
+                  <input className="input" placeholder="Qtà" value={String(ing.qty)}
+                    onChange={(e) => updateIng(ing._id, "qty", e.target.value)}
+                    style={{ padding: "0.4rem 0.5rem", fontSize: "0.875rem" }} />
+                  <select className="input" value={ing.unit}
+                    onChange={(e) => updateIng(ing._id, "unit", e.target.value)}
+                    style={{ padding: "0.4rem 0.3rem", fontSize: "0.875rem" }}>
+                    {unitOptions.map((u) => <option key={u} value={u}>{u || "—"}</option>)}
                   </select>
-                  <input
-                    className="input"
-                    placeholder="Ingrediente"
-                    value={ing.name}
-                    onChange={(e) => updateIngredient(ing._id, "name", e.target.value)}
-                    style={{ padding: "0.4rem 0.5rem", fontSize: "0.875rem" }}
-                  />
-                  <button
-                    onClick={() => removeIngredient(ing._id)}
-                    aria-label="Rimuovi ingrediente"
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "var(--text-muted)", padding: "0.3rem",
-                      display: "flex", alignItems: "center",
-                    }}
-                  >
+                  <input className="input" placeholder="Ingrediente" value={ing.name}
+                    onChange={(e) => updateIng(ing._id, "name", e.target.value)}
+                    style={{ padding: "0.4rem 0.5rem", fontSize: "0.875rem" }} />
+                  <button onClick={() => removeIng(ing._id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.3rem", display: "flex" }}>
                     <IconTrash />
                   </button>
                 </div>
               ))}
             </div>
-
-            {ing_ambiguous(ingredients) && (
-              <p style={{ fontSize: "0.78rem", color: "var(--warning)", marginTop: "0.5rem" }}>
-                ⚠ Alcuni solidi sono dati in ml (conversione da cup). Verifica le quantità.
-              </p>
-            )}
-
-            <button
-              className="btn btn-ghost"
-              onClick={addIngredient}
-              style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem", alignSelf: "flex-start" }}
-            >
+            <button className="btn btn-ghost" onClick={addIng}
+              style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem" }}>
               <IconPlus /> Aggiungi ingrediente
             </button>
           </div>
 
-          {/* Passi */}
-          <div className="card" style={{ padding: "1rem" }}>
-            <p style={{ fontWeight: 700, fontSize: "0.9rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.03em" }}>
-              PROCEDIMENTO
-            </p>
+          {/* Preview ingredienti JP (read-only, collassato) */}
+          {hasBilingual && jaData && jaData.ingredients.length > 0 && (
+            <details className="card" style={{ padding: "0.875rem 1rem" }}>
+              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", color: "var(--text-muted)", letterSpacing: "0.05em", textTransform: "uppercase", listStyle: "none" }}>
+                ▸ 材料 (JP) — {jaData.ingredients.length} ingredienti · auto
+              </summary>
+              <ul style={{ margin: "0.625rem 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                {jaData.ingredients.map((ing, i) => (
+                  <li key={i} style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                    {ing.qty && String(ing.qty) !== "" ? `${ing.qty} ` : ""}{ing.unit || ""} {ing.name}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
+          {/* Passi IT */}
+          <div className="card" style={{ padding: "1rem" }}>
+            <p style={{ fontWeight: 700, fontSize: "0.85rem", margin: "0 0 0.75rem", color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Procedimento (IT)
+            </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
               {steps.map((step, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", gap: "0.5rem", alignItems: "flex-start" }}>
-                  <span style={{
-                    fontFamily: "var(--font-serif)",
-                    fontWeight: 700,
-                    color: "var(--brand)",
-                    paddingTop: "0.55rem",
-                    textAlign: "center",
-                    fontSize: "0.875rem",
-                  }}>
+                  <span style={{ fontFamily: "var(--font-serif)", fontWeight: 700, color: "var(--brand)", paddingTop: "0.55rem", textAlign: "center", fontSize: "0.875rem" }}>
                     {i + 1}
                   </span>
-                  <textarea
-                    className="input"
-                    value={step}
-                    onChange={(e) => updateStep(i, e.target.value)}
+                  <textarea className="input" value={step} onChange={(e) => updateStep(i, e.target.value)}
                     style={{ minHeight: 72, fontSize: "0.875rem", lineHeight: 1.6 }}
-                    placeholder={`Passo ${i + 1}…`}
-                  />
-                  <button
-                    onClick={() => removeStep(i)}
-                    aria-label="Rimuovi passo"
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "var(--text-muted)", padding: "0.55rem 0.3rem",
-                      display: "flex", alignItems: "flex-start",
-                    }}
-                  >
+                    placeholder={`Passo ${i + 1}…`} />
+                  <button onClick={() => removeStep(i)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "0.55rem 0.3rem", display: "flex", alignItems: "flex-start" }}>
                     <IconTrash />
                   </button>
                 </div>
               ))}
             </div>
-
-            <button
-              className="btn btn-ghost"
-              onClick={addStep}
-              style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem", alignSelf: "flex-start" }}
-            >
+            <button className="btn btn-ghost" onClick={addStep}
+              style={{ marginTop: "0.75rem", gap: "0.35rem", fontSize: "0.875rem" }}>
               <IconPlus /> Aggiungi passo
             </button>
           </div>
 
-          {/* Salva (anche in fondo) */}
-          <button
-            className="btn btn-primary"
-            onClick={handleSave}
-            disabled={saving}
-            style={{ gap: "0.4rem", alignSelf: "flex-end" }}
-          >
-            <IconSave />
-            {saving ? "Salvataggio…" : "Salva nel libro"}
+          {/* Preview passi JP */}
+          {hasBilingual && jaData && jaData.steps.length > 0 && (
+            <details className="card" style={{ padding: "0.875rem 1rem" }}>
+              <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: "0.82rem", color: "var(--text-muted)", letterSpacing: "0.05em", textTransform: "uppercase", listStyle: "none" }}>
+                ▸ 作り方 (JP) — {jaData.steps.length} passi · auto
+              </summary>
+              <ol style={{ margin: "0.625rem 0 0", padding: "0 0 0 1.25rem" }}>
+                {jaData.steps.map((step, i) => (
+                  <li key={i} style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginBottom: "0.3rem" }}>{step}</li>
+                ))}
+              </ol>
+            </details>
+          )}
+
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}
+            style={{ gap: "0.4rem", alignSelf: "flex-end" }}>
+            <IconSave /> {saving ? t("review.saving") : t("review.save")}
           </button>
         </div>
       </div>
 
-      {/* Responsive: su mobile stack a colonna singola */}
       <style>{`
-        @media (max-width: 640px) {
-          .parse-review-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
+        @media (max-width: 640px) { .parse-review-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </div>
   );
 }
 
-function ing_ambiguous(ingredients: EditableIngredient[]): boolean {
-  return ingredients.some((i) => i.ambiguous);
-}
-
-// ─── AddRecipePage ────────────────────────────────────────────────────────────
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 export default function AddRecipePage() {
   const navigate = useNavigate();
   const [parsed,       setParsed]       = useState<ParsedResult | null>(null);
   const [originalText, setOriginalText] = useState("");
-
   const { saveRecipe } = useRecipes();
 
   const handleAnalyze = useCallback((text: string) => {
@@ -436,13 +373,10 @@ export default function AddRecipePage() {
     setParsed(parseRecipe(text));
   }, []);
 
-  const handleSave = useCallback(
-    async (data: Omit<Recipe, "id" | "createdAt">) => {
-      const saved = await saveRecipe(data);
-      navigate(`/ricette/${saved.id}`);
-    },
-    [saveRecipe, navigate]
-  );
+  const handleSave = useCallback(async (data: Omit<Recipe, "id" | "createdAt">) => {
+    const saved = await saveRecipe(data);
+    navigate(`/ricette/${saved.id}`);
+  }, [saveRecipe, navigate]);
 
   if (parsed) {
     return (
@@ -454,6 +388,5 @@ export default function AddRecipePage() {
       />
     );
   }
-
   return <PasteStep onAnalyze={handleAnalyze} />;
 }
