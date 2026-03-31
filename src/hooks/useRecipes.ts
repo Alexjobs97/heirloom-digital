@@ -1,10 +1,11 @@
 /**
  * useRecipes.ts — Hook principale per accesso reattivo alle ricette.
- * Cache in-memory condivisa tra tutte le istanze nel render tree.
+ * FIX: ricerca giapponese (cerca anche in recipe.ja) + multi-ingrediente AND.
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Recipe, SearchFilters } from "../types";
+import { parseIngredientTerms, isMultiIngredientQuery } from "../types";
 import {
   getAllRecipes,
   getRecipeById,
@@ -24,6 +25,74 @@ async function refreshCache(): Promise<Recipe[]> {
   _cache = await getAllRecipes();
   notifyAll();
   return _cache;
+}
+
+// ─── Matching helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Controlla se una ricetta contiene un singolo termine (testo libero).
+ * Cerca in: titolo IT, titolo JP, tag, ingredienti IT, ingredienti JP.
+ */
+function recipeMatchesTerm(r: Recipe, term: string): boolean {
+  const q = term.toLowerCase();
+
+  // Titolo italiano
+  if (r.title.toLowerCase().includes(q)) return true;
+
+  // Titolo giapponese
+  if (r.ja?.title?.toLowerCase().includes(q)) return true;
+
+  // Tag
+  if (r.tags.some((t) => t.toLowerCase().includes(q))) return true;
+
+  // Ingredienti italiani
+  if (r.ingredients.some(
+    (ing) =>
+      ing.displayName.toLowerCase().includes(q) ||
+      ing.canonicalId.toLowerCase().includes(q)
+  )) return true;
+
+  // Ingredienti giapponesi
+  if (r.ja?.ingredients?.some(
+    (ing) =>
+      ing.displayName.toLowerCase().includes(q) ||
+      ing.canonicalId.toLowerCase().includes(q)
+  )) return true;
+
+  return false;
+}
+
+/**
+ * Controlla se la ricetta ha TUTTI i termini in almeno uno dei
+ * suoi ingredienti (IT o JP). Usato per la ricerca multi-ingrediente.
+ */
+function recipeHasAllIngredients(r: Recipe, terms: string[]): boolean {
+  return terms.every((term) => {
+    const q = term.toLowerCase();
+
+    // Ingredienti italiani
+    const inIt = r.ingredients.some(
+      (ing) =>
+        ing.displayName.toLowerCase().includes(q) ||
+        ing.canonicalId.toLowerCase().includes(q)
+    );
+    if (inIt) return true;
+
+    // Ingredienti giapponesi
+    const inJa = r.ja?.ingredients?.some(
+      (ing) =>
+        ing.displayName.toLowerCase().includes(q) ||
+        ing.canonicalId.toLowerCase().includes(q)
+    );
+    if (inJa) return true;
+
+    // Anche titolo e tag (per flessibilità)
+    if (r.title.toLowerCase().includes(q)) return true;
+    if (r.ja?.title?.toLowerCase().includes(q)) return true;
+    if (r.tags.some((t) => t.toLowerCase().includes(q))) return true;
+
+    return false;
+  });
 }
 
 // ─── Hook principale ──────────────────────────────────────────────────────────
@@ -51,6 +120,7 @@ export function useRecipes(filters?: SearchFilters) {
   // Filtro + ricerca client-side
   const filtered = useMemo(() => {
     let list = [...recipes];
+
     if (!filters) {
       return list.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -59,22 +129,21 @@ export function useRecipes(filters?: SearchFilters) {
 
     const { query, starred, maxTime, tags, recentOnly } = filters;
 
-    if (starred)    list = list.filter((r) => r.starred);
-    if (maxTime)    list = list.filter((r) => r.totalTime > 0 && r.totalTime <= maxTime);
+    if (starred)      list = list.filter((r) => r.starred);
+    if (maxTime)      list = list.filter((r) => r.totalTime > 0 && r.totalTime <= maxTime);
     if (tags?.length) list = list.filter((r) => tags.every((t) => r.tags.includes(t)));
 
     if (query?.trim()) {
-      const q = query.toLowerCase().trim();
-      list = list.filter(
-        (r) =>
-          r.title.toLowerCase().includes(q) ||
-          r.tags.some((t) => t.toLowerCase().includes(q)) ||
-          r.ingredients.some(
-            (ing) =>
-              ing.displayName.toLowerCase().includes(q) ||
-              ing.canonicalId.toLowerCase().includes(q)
-          )
-      );
+      if (isMultiIngredientQuery(query)) {
+        // ── Modalità multi-ingrediente: AND su tutti i termini ──────────────
+        const terms = parseIngredientTerms(query);
+        if (terms.length > 0) {
+          list = list.filter((r) => recipeHasAllIngredients(r, terms));
+        }
+      } else {
+        // ── Ricerca testo libero singolo termine ────────────────────────────
+        list = list.filter((r) => recipeMatchesTerm(r, query.trim()));
+      }
     }
 
     if (recentOnly) {
@@ -102,10 +171,12 @@ export function useRecipes(filters?: SearchFilters) {
     async (
       data: Omit<Recipe, "id" | "createdAt"> & { id?: string; createdAt?: string }
     ): Promise<Recipe> => {
+      const now = new Date().toISOString();
       const full = {
         ...data,
         id:        data.id        ?? generateId(),
-        createdAt: data.createdAt ?? new Date().toISOString(),
+        createdAt: data.createdAt ?? now,
+        updatedAt: now,
       } as Recipe;
       await upsertRecipe(full);
       await refreshCache();
@@ -115,7 +186,8 @@ export function useRecipes(filters?: SearchFilters) {
   );
 
   const updateRecipe = useCallback(async (recipe: Recipe): Promise<void> => {
-    await upsertRecipe(recipe);
+    const updated = { ...recipe, updatedAt: new Date().toISOString() };
+    await upsertRecipe(updated);
     await refreshCache();
   }, []);
 
@@ -127,7 +199,7 @@ export function useRecipes(filters?: SearchFilters) {
   const toggleStar = useCallback(async (id: string): Promise<void> => {
     const r = await getRecipeById(id);
     if (!r) return;
-    await upsertRecipe({ ...r, starred: !r.starred });
+    await upsertRecipe({ ...r, starred: !r.starred, updatedAt: new Date().toISOString() });
     await refreshCache();
   }, []);
 
@@ -145,6 +217,38 @@ export function useRecipes(filters?: SearchFilters) {
       .catch(() => { setError("Errore di accesso al database"); setLoading(false); });
   }, []);
 
+  /**
+   * Sostituisce l'intera cache con un array di ricette (usato dal cloud sync).
+   * Non cancella ricette locali non presenti nel cloud — fa un merge per ID.
+   */
+  const mergeFromCloud = useCallback(async (remoteRecipes: Recipe[]): Promise<void> => {
+    const local = _cache ?? await getAllRecipes();
+
+    // Indice locale per ID
+    const localById = new Map(local.map((r) => [r.id, r]));
+
+    // Merge: per ogni ricetta remota, prende quella più recente
+    for (const remote of remoteRecipes) {
+      const loc = localById.get(remote.id);
+      if (!loc) {
+        // Nuova ricetta remota non presente in locale → aggiungi
+        await upsertRecipe(remote);
+      } else {
+        // Entrambe presenti: usa updatedAt per determinare quella più recente
+        const remoteTs = new Date(remote.updatedAt ?? remote.createdAt).getTime();
+        const localTs  = new Date(loc.updatedAt  ?? loc.createdAt).getTime();
+        if (remoteTs > localTs) {
+          await upsertRecipe(remote);
+        }
+        // altrimenti mantieni quella locale
+      }
+      localById.delete(remote.id); // segnala come processata
+    }
+    // Le ricette locali non presenti nel cloud rimangono intatte (solo aggiunta, mai eliminazione)
+
+    await refreshCache();
+  }, []);
+
   return {
     recipes: filtered,
     allRecipes: recipes,
@@ -157,6 +261,7 @@ export function useRecipes(filters?: SearchFilters) {
     toggleStar,
     markCooked,
     reload,
+    mergeFromCloud,
   };
 }
 
@@ -192,3 +297,6 @@ export function useRecipe(id: string | undefined) {
 
   return { recipe, loading, error };
 }
+
+// ─── Espone refreshCache per il cloud sync ────────────────────────────────────
+export { refreshCache };

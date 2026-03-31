@@ -3,19 +3,15 @@
 export interface Ingredient {
   id: string;
   qty: number | string;          // 250 | "1/2" | "q.b."
-  unit: "ml" | "g" | "";         // ONLY these three values
-  displayName: string;           // nome come appare all'utente
-  canonicalId: string;           // id neutro per ricerca multilingua
-  checked?: boolean;             // mise en place checkbox
-  note?: string;                 // es. "a temperatura ambiente"
+  unit: "ml" | "g" | "";
+  displayName: string;
+  canonicalId: string;
+  checked?: boolean;
+  note?: string;
 }
 
 // ─── Bilingual locale ──────────────────────────────────────────────────────────
 
-/**
- * Contenuto tradotto per una singola lingua.
- * Usato quando la ricetta è stata importata con blocchi === IT === / === JP ===
- */
 export interface RecipeLocale {
   title: string;
   ingredients: Ingredient[];
@@ -27,41 +23,39 @@ export interface RecipeLocale {
 export type RecipeLanguage = "it" | "ja" | "en";
 
 export interface Recipe {
-  id: string;                    // UUID
-  title: string;                 // italiano (o lingua principale)
-  coverImage?: string;           // data URL or external URL
-  yield: number;                 // porzioni di base (es. 4)
-  totalTime: number;             // minuti totali (0 = non specificato)
-  prepTime?: number;             // minuti preparazione
-  cookTime?: number;             // minuti cottura
-  ingredients: Ingredient[];     // italiano
-  steps: string[];               // italiano
+  id: string;
+  title: string;
+  coverImage?: string;
+  yield: number;
+  totalTime: number;
+  prepTime?: number;
+  cookTime?: number;
+  ingredients: Ingredient[];
+  steps: string[];
   tags: string[];
   language: RecipeLanguage;
   starred?: boolean;
   createdAt: string;             // ISO string
-  lastCooked?: string;           // ISO string
-  source?: string;               // URL o nome fonte
-  notes?: string;                // note libere
+  updatedAt?: string;            // ISO string — per merge cloud sync
+  lastCooked?: string;
+  source?: string;
+  notes?: string;
 
-  /**
-   * Versione giapponese della ricetta (opzionale).
-   * Presente solo se il testo originale conteneva === JP === block.
-   */
+  /** Versione giapponese (opzionale). Presente solo se importata con === JP === */
   ja?: RecipeLocale;
 }
 
 // ─── Parser ────────────────────────────────────────────────────────────────────
 
 export interface RawIngredient {
-  raw: string;                   // testo originale
+  raw: string;
   qty: number | string;
-  unit: string;                  // unità originale (può essere imperiale)
+  unit: string;
   name: string;
   canonicalId?: string;
   convertedQty?: number;
   convertedUnit?: "ml" | "g" | "";
-  ambiguous?: boolean;           // solido dato in volume
+  ambiguous?: boolean;
 }
 
 export interface ParsedResult {
@@ -74,11 +68,7 @@ export interface ParsedResult {
   steps: string[];
   tags: string[];
   language: RecipeLanguage;
-  warnings: string[];            // es. "solido dato in volume, verifica quantità"
-
-  /**
-   * Presente se il testo conteneva un blocco === JP ===
-   */
+  warnings: string[];
   ja?: {
     title: string;
     ingredients: RawIngredient[];
@@ -98,10 +88,10 @@ export interface TimerState {
   finished: boolean;
 }
 
-// ─── Daily Planner ──────────────────────────────────────────────────────────────
+// ─── Daily Planner ─────────────────────────────────────────────────────────────
 
 export interface DailyPlan {
-  date: string;                  // YYYY-MM-DD
+  date: string;
   recipeIds: string[];
 }
 
@@ -116,11 +106,30 @@ export interface AppSettings {
 // ─── Search ────────────────────────────────────────────────────────────────────
 
 export interface SearchFilters {
+  /**
+   * Testo libero — se contiene virgole (o 、) viene interpretato come
+   * lista di ingredienti in AND (tutti presenti nella ricetta).
+   */
   query: string;
   starred?: boolean;
-  maxTime?: number;              // minuti
+  maxTime?: number;
   tags?: string[];
   recentOnly?: boolean;
+}
+
+/** Helper: estrae i termini ingrediente dalla query (split su , / 、 / ; ) */
+export function parseIngredientTerms(query: string): string[] {
+  if (!query) return [];
+  // Divide su virgola italiana, giapponese, punto e virgola
+  return query
+    .split(/[,、;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/** True se la query è in "modalità multi-ingrediente" */
+export function isMultiIngredientQuery(query: string): boolean {
+  return /[,、;]/.test(query);
 }
 
 // ─── Ingredient Dictionary ─────────────────────────────────────────────────────
@@ -133,7 +142,17 @@ export interface DictionaryEntry {
     en: string[];
   };
   defaultUnit?: "g" | "ml" | "";
-  isSolid?: boolean;             // true = solido, usato per warning conversione
+  isSolid?: boolean;
 }
 
 export type IngredientDictionary = Record<string, DictionaryEntry>;
+
+// ─── Cloud Sync ────────────────────────────────────────────────────────────────
+
+export type SyncStatus = "idle" | "syncing" | "synced" | "error" | "disabled";
+
+export interface SyncState {
+  status: SyncStatus;
+  lastSync: string | null;       // ISO string
+  error: string | null;
+}

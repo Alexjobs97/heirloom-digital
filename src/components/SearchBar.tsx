@@ -1,9 +1,13 @@
 /**
- * SearchBar.tsx — Barra di ricerca con filtri rapidi.
+ * SearchBar.tsx v2 — Ricerca con supporto multi-ingrediente.
+ * Separare i termini con virgola (,) o virgola giapponese (、) per
+ * filtrare ricette che contengono TUTTI gli ingredienti elencati.
  */
 
 import { useRef, useCallback } from "react";
 import type { SearchFilters } from "../types";
+import { parseIngredientTerms, isMultiIngredientQuery } from "../types";
+import { useTranslation } from "../i18n/useTranslation";
 
 function IconSearch() {
   return (
@@ -23,12 +27,15 @@ function IconX() {
     </svg>
   );
 }
-
-interface FilterChip {
-  key: string;
-  label: string;
-  active: boolean;
-  onClick: () => void;
+function IconIngredients() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+      <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12"/>
+      <path d="M12 8v4l3 3"/>
+      <path d="M2 2l4 4"/>
+    </svg>
+  );
 }
 
 interface SearchBarProps {
@@ -38,42 +45,46 @@ interface SearchBarProps {
   totalCount: number;
 }
 
-export default function SearchBar({
-  filters,
-  onChange,
-  allTags,
-  totalCount,
-}: SearchBarProps) {
+export default function SearchBar({ filters, onChange, allTags, totalCount }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const { t, locale } = useTranslation();
 
   const clearQuery = useCallback(() => {
     onChange({ query: "" });
     inputRef.current?.focus();
   }, [onChange]);
 
-  // Chip filtri rapidi
-  const chips: FilterChip[] = [
+  // ── Analisi query ─────────────────────────────────────────────────────────
+  const isMulti  = isMultiIngredientQuery(filters.query ?? "");
+  const terms    = isMulti ? parseIngredientTerms(filters.query ?? "") : [];
+  // Rimuove un termine specifico dalla query
+  const removeTerm = useCallback((term: string) => {
+    const remaining = terms.filter((t) => t !== term);
+    onChange({ query: remaining.join(", ") });
+  }, [terms, onChange]);
+
+  // ── Chip filtri rapidi ────────────────────────────────────────────────────
+  const chips = [
     {
       key: "starred",
-      label: "⭐ Preferite",
+      label: t("filter.starred"),
       active: !!filters.starred,
       onClick: () => onChange({ starred: !filters.starred }),
     },
     {
       key: "recent",
-      label: "🕐 Recenti",
+      label: t("filter.recent"),
       active: !!filters.recentOnly,
       onClick: () => onChange({ recentOnly: !filters.recentOnly }),
     },
     {
       key: "quick",
-      label: "⚡ < 30 min",
+      label: t("filter.quick"),
       active: filters.maxTime === 30,
       onClick: () => onChange({ maxTime: filters.maxTime === 30 ? undefined : 30 }),
     },
   ];
 
-  // Tag più usati (max 6 mostrati)
   const topTags = allTags.slice(0, 6);
 
   const hasActiveFilters =
@@ -83,62 +94,109 @@ export default function SearchBar({
     filters.maxTime !== undefined ||
     (filters.tags?.length ?? 0) > 0;
 
+  const placeholder = locale === "ja"
+    ? "名前・食材・タグで検索… (複数食材はコンマで区切る)"
+    : t("search.placeholder");
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      {/* Input ricerca */}
-      <div style={{ position: "relative" }}>
-        <span style={{
-          position: "absolute",
-          left: "0.875rem",
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: "var(--text-muted)",
-          pointerEvents: "none",
-          display: "flex",
-        }}>
-          <IconSearch />
-        </span>
 
-        <input
-          ref={inputRef}
-          type="search"
-          className="input"
-          placeholder="Cerca per nome, ingrediente o tag…"
-          value={filters.query ?? ""}
-          onChange={(e) => onChange({ query: e.target.value })}
-          style={{ paddingLeft: "2.5rem", paddingRight: filters.query ? "2.5rem" : "0.875rem" }}
-          aria-label="Cerca ricette"
-        />
+      {/* ── Input ricerca ───────────────────────────────────────────────── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+        <div style={{ position: "relative" }}>
+          <span style={{
+            position: "absolute", left: "0.875rem", top: "50%",
+            transform: "translateY(-50%)", color: "var(--text-muted)",
+            pointerEvents: "none", display: "flex",
+          }}>
+            <IconSearch />
+          </span>
 
-        {filters.query && (
-          <button
-            onClick={clearQuery}
-            aria-label="Cancella ricerca"
+          <input
+            ref={inputRef}
+            type="search"
+            className="input"
+            placeholder={placeholder}
+            value={filters.query ?? ""}
+            onChange={(e) => onChange({ query: e.target.value })}
             style={{
-              position: "absolute",
-              right: "0.875rem",
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              display: "flex",
-              padding: "0.25rem",
+              paddingLeft: "2.5rem",
+              paddingRight: filters.query ? "2.5rem" : "0.875rem",
             }}
-          >
-            <IconX />
-          </button>
+            aria-label="Cerca ricette"
+          />
+
+          {filters.query && (
+            <button
+              onClick={clearQuery}
+              aria-label="Cancella ricerca"
+              style={{
+                position: "absolute", right: "0.875rem", top: "50%",
+                transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--text-muted)", display: "flex", padding: "0.25rem",
+              }}
+            >
+              <IconX />
+            </button>
+          )}
+        </div>
+
+        {/* Hint multi-ingrediente */}
+        {!filters.query && (
+          <p style={{
+            margin: 0, fontSize: "0.75rem", color: "var(--text-muted)",
+            paddingLeft: "0.25rem",
+          }}>
+            {locale === "ja"
+              ? "複数の食材で絞り込む例：うまご、牛乳、チーズ"
+              : "Più ingredienti in AND: es. uova, latte, formaggio"}
+          </p>
+        )}
+
+        {/* ── Chips termini multi-ingrediente ───────────────────────────── */}
+        {isMulti && terms.length > 0 && (
+          <div style={{
+            display: "flex", flexWrap: "wrap", gap: "0.35rem",
+            padding: "0.5rem 0.625rem",
+            background: "var(--brand-light)",
+            borderRadius: "var(--radius-md)",
+            alignItems: "center",
+          }}>
+            <span style={{
+              display: "flex", alignItems: "center", gap: "0.25rem",
+              fontSize: "0.72rem", fontWeight: 700, color: "var(--brand-dark)",
+              letterSpacing: "0.04em", textTransform: "uppercase", marginRight: "0.15rem",
+            }}>
+              <IconIngredients />
+              {locale === "ja" ? "AND検索" : "AND"}
+            </span>
+            {terms.map((term, i) => (
+              <button
+                key={i}
+                onClick={() => removeTerm(term)}
+                title={`Rimuovi "${term}"`}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                  padding: "0.2rem 0.55rem 0.2rem 0.65rem",
+                  background: "var(--brand)", color: "#fff",
+                  border: "none", borderRadius: "var(--radius-full)",
+                  fontSize: "0.78rem", fontWeight: 700, cursor: "pointer",
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.8"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+              >
+                {term}
+                <span style={{ opacity: 0.7, fontSize: "0.7rem", lineHeight: 1 }}>✕</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Riga filtri rapidi */}
-      <div style={{
-        display: "flex",
-        gap: "0.4rem",
-        flexWrap: "wrap",
-        alignItems: "center",
-      }}>
+      {/* ── Chip filtri rapidi ───────────────────────────────────────────── */}
+      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
         {chips.map((chip) => (
           <button
             key={chip.key}
@@ -146,12 +204,8 @@ export default function SearchBar({
             style={{
               padding: "0.3rem 0.75rem",
               borderRadius: "var(--radius-full)",
-              fontSize: "0.8rem",
-              fontWeight: 700,
-              border: "1.5px solid",
-              cursor: "pointer",
-              transition: "all 0.15s",
-              whiteSpace: "nowrap",
+              fontSize: "0.8rem", fontWeight: 700, border: "1.5px solid",
+              cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap",
               background: chip.active ? "var(--brand)" : "var(--bg-card)",
               borderColor: chip.active ? "var(--brand)" : "var(--border)",
               color: chip.active ? "#fff" : "var(--text-secondary)",
@@ -177,12 +231,8 @@ export default function SearchBar({
               style={{
                 padding: "0.3rem 0.75rem",
                 borderRadius: "var(--radius-full)",
-                fontSize: "0.8rem",
-                fontWeight: 700,
-                border: "1.5px solid",
-                cursor: "pointer",
-                transition: "all 0.15s",
-                whiteSpace: "nowrap",
+                fontSize: "0.8rem", fontWeight: 700, border: "1.5px solid",
+                cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap",
                 background: active ? "var(--brand-light)" : "var(--bg-card)",
                 borderColor: active ? "var(--brand)" : "var(--border)",
                 color: active ? "var(--brand-dark)" : "var(--text-secondary)",
@@ -193,38 +243,32 @@ export default function SearchBar({
           );
         })}
 
-        {/* Reset tutti i filtri */}
+        {/* Reset filtri */}
         {hasActiveFilters && (
           <button
-            onClick={() =>
-              onChange({ query: "", starred: false, recentOnly: false, maxTime: undefined, tags: undefined })
-            }
+            onClick={() => onChange({ query: "", starred: false, recentOnly: false, maxTime: undefined, tags: undefined })}
             style={{
               padding: "0.3rem 0.65rem",
               borderRadius: "var(--radius-full)",
-              fontSize: "0.78rem",
-              fontWeight: 700,
+              fontSize: "0.78rem", fontWeight: 700,
               border: "1.5px dashed var(--border)",
-              cursor: "pointer",
-              background: "transparent",
-              color: "var(--text-muted)",
-              marginLeft: "auto",
-              whiteSpace: "nowrap",
+              cursor: "pointer", background: "transparent",
+              color: "var(--text-muted)", marginLeft: "auto", whiteSpace: "nowrap",
             }}
           >
-            ✕ Azzera
+            ✕ {locale === "ja" ? "リセット" : "Azzera"}
           </button>
         )}
       </div>
 
-      {/* Contatore risultati (solo se ricerca attiva) */}
+      {/* Contatore risultati */}
       {hasActiveFilters && (
         <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
           {totalCount === 0
-            ? "Nessuna ricetta trovata"
+            ? (locale === "ja" ? "レシピが見つかりません" : t("search.noResults"))
             : totalCount === 1
-            ? "1 ricetta trovata"
-            : `${totalCount} ricette trovate`}
+            ? (locale === "ja" ? "1件のレシピが見つかりました" : "1 ricetta trovata")
+            : (locale === "ja" ? `${totalCount}件のレシピが見つかりました` : `${totalCount} ricette trovate`)}
         </p>
       )}
     </div>
