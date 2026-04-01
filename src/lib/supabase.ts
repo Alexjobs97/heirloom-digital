@@ -24,7 +24,7 @@ import type { Recipe } from "../types";
 // ── Configurazione ────────────────────────────────────────────────────────────
 
 export const SUPABASE_URL      = "https://algwjaodqfyhndpfvgja.supabase.co";
-export const SUPABASE_ANON_KEY = "sb_secret_Fw3DhC5q9C0HSnPYD9UItg_Suxsc4Yh"; // ← sostituisci con la tua anon key
+export const SUPABASE_ANON_KEY = "sb_publishable_cisPyzz0OAKqjj-ERGMzPg_6RD6Oa8K"; // ← sostituisci con la tua anon key
 
 export const SYNC_ENABLED = SUPABASE_ANON_KEY !== "YOUR_ANON_KEY_HERE";
 
