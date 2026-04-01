@@ -1,59 +1,70 @@
 /**
- * supabase.ts — Client Supabase + operazioni di cloud sync.
+ * supabase.ts v2 — Tombstone (deleted_ids) per sync corretto delle cancellazioni.
  *
- * ── Setup su Supabase (esegui nell'SQL Editor del tuo progetto) ──────────────
+ * ── Aggiorna la tabella Supabase (SQL Editor) ────────────────────────────────
+ *
+ * ALTER TABLE recipe_books
+ *   ADD COLUMN IF NOT EXISTS deleted_ids jsonb NOT NULL DEFAULT '[]'::jsonb;
+ *
+ * ── Schema completo (se riparti da zero) ────────────────────────────────────
  *
  * create table recipe_books (
- *   sync_id   text primary key,
- *   data      jsonb not null default '[]'::jsonb,
- *   updated_at timestamptz not null default now()
+ *   sync_id     text primary key,
+ *   data        jsonb not null default '[]'::jsonb,
+ *   deleted_ids jsonb not null default '[]'::jsonb,
+ *   updated_at  timestamptz not null default now()
  * );
- *
  * alter table recipe_books enable row level security;
- *
- * -- Permetti accesso anonimo (il sync_id è il "segreto")
  * create policy "anon_all" on recipe_books
  *   for all using (true) with check (true);
- *
- * ── Variabili da configurare ─────────────────────────────────────────────────
- * Inserisci la tua anon key in SUPABASE_ANON_KEY (sostituisci il placeholder).
  */
 
 import type { Recipe } from "../types";
 
-// ── Configurazione ────────────────────────────────────────────────────────────
-
 export const SUPABASE_URL      = "https://algwjaodqfyhndpfvgja.supabase.co";
-export const SUPABASE_ANON_KEY = "sb_publishable_cisPyzz0OAKqjj-ERGMzPg_6RD6Oa8K"; // ← sostituisci con la tua anon key
-
+export const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE";
 export const SYNC_ENABLED = SUPABASE_ANON_KEY !== "YOUR_ANON_KEY_HERE";
 
-// ── LocalStorage keys ─────────────────────────────────────────────────────────
-
-const LS_SYNC_ID       = "heirloom_sync_id";
-const LS_LAST_SYNC     = "heirloom_last_sync";
+const LS_SYNC_ID        = "heirloom_sync_id";
+const LS_LAST_SYNC      = "heirloom_last_sync";
 const LS_REMOTE_UPDATED = "heirloom_remote_updated";
+const LS_DELETED_IDS    = "heirloom_deleted_ids";
 
-// ── Sync ID (UUID generato al primo avvio) ────────────────────────────────────
+// ── Sync ID ───────────────────────────────────────────────────────────────────
 
 export function getSyncId(): string {
   try {
     let id = localStorage.getItem(LS_SYNC_ID);
-    if (!id) {
-      id = generateUUID();
-      localStorage.setItem(LS_SYNC_ID, id);
-    }
+    if (!id) { id = makeUUID(); localStorage.setItem(LS_SYNC_ID, id); }
     return id;
-  } catch {
-    return generateUUID();
-  }
+  } catch { return makeUUID(); }
 }
 
-function generateUUID(): string {
+function makeUUID(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
+}
+
+// ── Tombstone helpers ─────────────────────────────────────────────────────────
+
+export function getLocalDeletedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_DELETED_IDS);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch { return new Set(); }
+}
+
+export function addLocalDeletedId(id: string) {
+  const set = getLocalDeletedIds();
+  set.add(id);
+  try { localStorage.setItem(LS_DELETED_IDS, JSON.stringify([...set])); } catch {}
+}
+
+export function setLocalDeletedIds(ids: string[]) {
+  try { localStorage.setItem(LS_DELETED_IDS, JSON.stringify(ids)); } catch {}
 }
 
 // ── Timestamp helpers ─────────────────────────────────────────────────────────
@@ -61,126 +72,90 @@ function generateUUID(): string {
 export function getLastSyncTime(): string | null {
   try { return localStorage.getItem(LS_LAST_SYNC); } catch { return null; }
 }
-
-function setLastSyncTime(iso: string) {
+export function setLastSyncTime(iso: string) {
   try { localStorage.setItem(LS_LAST_SYNC, iso); } catch {}
 }
-
 function getRemoteUpdatedAt(): string | null {
   try { return localStorage.getItem(LS_REMOTE_UPDATED); } catch { return null; }
 }
-
 function setRemoteUpdatedAt(iso: string) {
   try { localStorage.setItem(LS_REMOTE_UPDATED, iso); } catch {}
 }
 
-// ── API helpers ───────────────────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────────
 
-function headers(): HeadersInit {
+function h(): Record<string, string> {
   return {
     "Content-Type":  "application/json",
     "apikey":        SUPABASE_ANON_KEY,
     "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-    "Prefer":        "return=representation",
   };
 }
 
 const TABLE_URL = `${SUPABASE_URL}/rest/v1/recipe_books`;
 
-// ── Fetch da cloud ─────────────────────────────────────────────────────────────
-
 export interface RemoteBook {
-  sync_id: string;
-  data: Recipe[];
-  updated_at: string;
+  sync_id:     string;
+  data:        Recipe[];
+  deleted_ids: string[];
+  updated_at:  string;
 }
 
-/**
- * Legge il libro ricette dal cloud per il sync_id corrente.
- * Ritorna null se non trovato o in caso di errore.
- */
 export async function fetchRemoteBook(syncId: string): Promise<RemoteBook | null> {
   if (!SYNC_ENABLED) return null;
   try {
     const res = await fetch(
-      `${TABLE_URL}?sync_id=eq.${encodeURIComponent(syncId)}&select=sync_id,data,updated_at`,
-      { headers: headers() }
+      `${TABLE_URL}?sync_id=eq.${encodeURIComponent(syncId)}&select=sync_id,data,deleted_ids,updated_at`,
+      { headers: h() }
     );
     if (!res.ok) return null;
     const rows: RemoteBook[] = await res.json();
-    return rows[0] ?? null;
-  } catch {
-    return null;
-  }
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, deleted_ids: Array.isArray(row.deleted_ids) ? row.deleted_ids : [] };
+  } catch { return null; }
 }
 
-/**
- * Carica solo i metadata (updated_at) senza scaricare tutto il payload.
- * Usato per decidere se è necessario un pull.
- */
 export async function fetchRemoteMeta(syncId: string): Promise<{ updated_at: string } | null> {
   if (!SYNC_ENABLED) return null;
   try {
     const res = await fetch(
       `${TABLE_URL}?sync_id=eq.${encodeURIComponent(syncId)}&select=updated_at`,
-      { headers: headers() }
+      { headers: h() }
     );
     if (!res.ok) return null;
     const rows: Array<{ updated_at: string }> = await res.json();
     return rows[0] ?? null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ── Push verso cloud ───────────────────────────────────────────────────────────
-
-/**
- * Salva (upsert) il libro ricette sul cloud.
- * Ritorna true se successo.
- */
-export async function pushBook(syncId: string, recipes: Recipe[]): Promise<boolean> {
+export async function pushBook(
+  syncId: string,
+  recipes: Recipe[],
+  deletedIds: string[]
+): Promise<boolean> {
   if (!SYNC_ENABLED) return false;
   const now = new Date().toISOString();
   try {
     const res = await fetch(TABLE_URL, {
       method: "POST",
-      headers: {
-        ...headers() as Record<string, string>,
-        "Prefer": "resolution=merge-duplicates,return=minimal",
-      },
-      body: JSON.stringify({
-        sync_id:    syncId,
-        data:       recipes,
-        updated_at: now,
-      }),
+      headers: { ...h(), "Prefer": "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ sync_id: syncId, data: recipes, deleted_ids: deletedIds, updated_at: now }),
     });
     if (!res.ok) return false;
     setLastSyncTime(now);
     setRemoteUpdatedAt(now);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-// ── Pull dal cloud ─────────────────────────────────────────────────────────────
-
-/**
- * Controlla se il cloud ha dati più recenti di quelli visti l'ultima volta.
- */
 export async function hasRemoteUpdates(syncId: string): Promise<boolean> {
   if (!SYNC_ENABLED) return false;
   const meta = await fetchRemoteMeta(syncId);
   if (!meta) return false;
-  const remoteTs = new Date(meta.updated_at).getTime();
-  const knownTs  = new Date(getRemoteUpdatedAt() ?? "1970-01-01").getTime();
-  return remoteTs > knownTs;
+  return new Date(meta.updated_at).getTime() > new Date(getRemoteUpdatedAt() ?? "1970-01-01").getTime();
 }
 
-/**
- * Segna come "visto" l'updated_at remoto (dopo il merge).
- */
 export function acknowledgeRemoteUpdate(updatedAt: string) {
   setRemoteUpdatedAt(updatedAt);
   setLastSyncTime(new Date().toISOString());

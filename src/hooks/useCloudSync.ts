@@ -1,5 +1,5 @@
 /**
- * useCloudSync.ts v2 — Accetta syncId dall'esterno (per multi-device paste).
+ * useCloudSync.ts v3 — Passa deleted_ids al push, e remoteDeletedIds al merge.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -11,6 +11,7 @@ import {
   hasRemoteUpdates,
   acknowledgeRemoteUpdate,
   getLastSyncTime,
+  getLocalDeletedIds,
 } from "../lib/supabase";
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -23,9 +24,8 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 interface UseCloudSyncOptions {
-  onMerge: (remoteRecipes: Recipe[]) => Promise<void>;
+  onMerge: (remoteRecipes: Recipe[], remoteDeletedIds: string[]) => Promise<void>;
   getLocalRecipes: () => Recipe[];
-  /** Sync ID passato dall'esterno — può cambiare se l'utente incolla un nuovo ID */
   syncId: string;
 }
 
@@ -42,41 +42,36 @@ export function useCloudSync(
   recipes: Recipe[],
   { onMerge, getLocalRecipes, syncId }: UseCloudSyncOptions
 ): CloudSyncAPI {
-  const [status,  setStatus]   = useState<SyncStatus>(SYNC_ENABLED ? "idle" : "disabled");
+  const [status,   setStatus]   = useState<SyncStatus>(SYNC_ENABLED ? "idle" : "disabled");
   const [lastSync, setLastSync] = useState<string | null>(getLastSyncTime());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Traccia l'ultimo syncId usato per il pull — quando cambia, rifai il pull
-  const lastPullId   = useRef<string>("");
+  const lastPullId     = useRef<string>("");
   const lastPushedHash = useRef<string>("");
 
   function recipesHash(rs: Recipe[]): string {
     return rs.map((r) => `${r.id}:${r.updatedAt ?? r.createdAt}`).join("|");
   }
 
-  // ── Pull: all'avvio e ogni volta che syncId cambia ───────────────────────
+  // ── Pull (quando syncId cambia o primo avvio) ─────────────────────────────
 
   useEffect(() => {
     if (!SYNC_ENABLED) return;
-    if (lastPullId.current === syncId) return;   // già pullato per questo ID
+    if (lastPullId.current === syncId) return;
     lastPullId.current = syncId;
-    lastPushedHash.current = "";                  // reset hash push per il nuovo ID
+    lastPushedHash.current = "";
 
     async function doPull() {
       setStatus("syncing");
       setErrorMsg(null);
       try {
         const hasUpdates = await hasRemoteUpdates(syncId);
-        if (!hasUpdates) {
-          setStatus("idle");
-          return;
-        }
+        if (!hasUpdates) { setStatus("idle"); return; }
         const remote = await fetchRemoteBook(syncId);
-        if (remote && remote.data?.length > 0) {
-          await onMerge(remote.data);
+        if (remote) {
+          await onMerge(remote.data ?? [], remote.deleted_ids ?? []);
           acknowledgeRemoteUpdate(remote.updated_at);
-          const now = new Date().toISOString();
-          setLastSync(now);
+          setLastSync(new Date().toISOString());
           setStatus("synced");
         } else {
           setStatus("idle");
@@ -93,14 +88,14 @@ export function useCloudSync(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncId]);
 
-  // ── Push debounced (5s) ───────────────────────────────────────────────────
+  // ── Push debounced ────────────────────────────────────────────────────────
 
   const debouncedRecipes = useDebounce(recipes, 5000);
 
   useEffect(() => {
     if (!SYNC_ENABLED) return;
-    if (!lastPullId.current) return;       // aspetta almeno un pull tentato
-    if (debouncedRecipes.length === 0) return;
+    if (!lastPullId.current) return;
+    if (debouncedRecipes.length === 0 && getLocalDeletedIds().size === 0) return;
 
     const hash = recipesHash(debouncedRecipes);
     if (hash === lastPushedHash.current) return;
@@ -109,11 +104,12 @@ export function useCloudSync(
       setStatus("syncing");
       setErrorMsg(null);
       try {
-        const ok = await pushBook(syncId, debouncedRecipes);
+        // Includiamo SEMPRE i deleted_ids nel push, anche se le ricette non sono cambiate
+        const deletedIds = [...getLocalDeletedIds()];
+        const ok = await pushBook(syncId, debouncedRecipes, deletedIds);
         if (ok) {
           lastPushedHash.current = hash;
-          const now = new Date().toISOString();
-          setLastSync(now);
+          setLastSync(new Date().toISOString());
           setStatus("synced");
         } else {
           setStatus("error");
@@ -130,7 +126,7 @@ export function useCloudSync(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedRecipes, syncId]);
 
-  // ── Sync manuale ─────────────────────────────────────────────────────────
+  // ── Sync manuale ──────────────────────────────────────────────────────────
 
   const syncNow = useCallback(async () => {
     if (!SYNC_ENABLED) return;
@@ -138,16 +134,16 @@ export function useCloudSync(
     setErrorMsg(null);
     try {
       const remote = await fetchRemoteBook(syncId);
-      if (remote && remote.data?.length > 0) {
-        await onMerge(remote.data);
+      if (remote) {
+        await onMerge(remote.data ?? [], remote.deleted_ids ?? []);
         acknowledgeRemoteUpdate(remote.updated_at);
       }
       const current = getLocalRecipes();
-      const ok = await pushBook(syncId, current);
+      const deletedIds = [...getLocalDeletedIds()];
+      const ok = await pushBook(syncId, current, deletedIds);
       if (ok) {
         lastPushedHash.current = recipesHash(current);
-        const now = new Date().toISOString();
-        setLastSync(now);
+        setLastSync(new Date().toISOString());
         setStatus("synced");
       } else {
         setStatus("error");
