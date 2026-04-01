@@ -22,7 +22,7 @@
 import type { Recipe } from "../types";
 
 export const SUPABASE_URL      = "https://algwjaodqfyhndpfvgja.supabase.co";
-export const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE";
+export const SUPABASE_ANON_KEY = "sb_publishable_cisPyzz0OAKqjj-ERGMzPg_6RD6Oa8K";
 export const SYNC_ENABLED = SUPABASE_ANON_KEY !== "YOUR_ANON_KEY_HERE";
 
 const LS_SYNC_ID        = "heirloom_sync_id";
