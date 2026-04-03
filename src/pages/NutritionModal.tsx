@@ -3,7 +3,7 @@
  * Mostra chiaramente quali ingredienti sono stati trovati/mancanti.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Ingredient } from "../types";
 import { calculateNutritionDetailed, MACRO_ROWS, formatExtraKey } from "../lib/nutrition";
@@ -51,7 +51,12 @@ export default function NutritionModal({ ingredients, servings, onClose }: Props
   const [showExtra,     setShowExtra]     = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
-  const result = useMemo(() => calculateNutritionDetailed(ingredients), [ingredients]);
+  // Calcola sempre fresco (niente memo): così le modifiche al DB custom
+  // ingredienti si riflettono immediatamente alla prossima apertura del modal.
+  // Il modal è un componente separato che monta/smonta ad ogni apertura,
+  // quindi non c'è rischio di ricalcoli inutili.
+  const resultRef = useRef(calculateNutritionDetailed(ingredients));
+  const result = resultRef.current;
   const { totals, rows, coveragePercent } = result;
 
   const hasSomething = rows.some((r) => r.status === "counted");

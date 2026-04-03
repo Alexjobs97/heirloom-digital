@@ -58,7 +58,7 @@ function toGrams(ing: Ingredient): { grams: number; status: IngredientStatus; me
     return { grams: qty, status: "counted" };
   }
 
-  // Nessuna unità → "N unità di X"
+  // Nessuna unità → "N unità di X" — usa peso_medio_unità obbligatoriamente
   if (entry.peso_medio_unità && entry.peso_medio_unità > 0) {
     return {
       grams: qty * entry.peso_medio_unità,
@@ -67,12 +67,12 @@ function toGrams(ing: Ingredient): { grams: number; status: IngredientStatus; me
     };
   }
 
-  // Fallback: se defaultUnit è g, assume grammi diretti
-  if (entry.defaultUnit === "g") {
-    return { grams: qty, status: "counted", message: "Assunto in grammi" };
-  }
-
-  return { grams: 0, status: "no_unit", message: "Unità non convertibile (manca peso_medio_unità)" };
+  // Nessun peso unitario → non conteggiato (l'utente deve aggiungerlo nel DB)
+  return {
+    grams: 0,
+    status: "no_unit",
+    message: `Aggiungi peso_medio_unità nel DB (${qty} unità × ? g)` ,
+  };
 }
 
 // ── Calcolo principale ────────────────────────────────────────────────────────
