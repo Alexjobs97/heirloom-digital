@@ -2,7 +2,7 @@
 
 export interface Ingredient {
   id: string;
-  qty: number | string;          // 250 | "1/2" | "q.b."
+  qty: number | string;
   unit: "ml" | "g" | "";
   displayName: string;
   canonicalId: string;
@@ -10,7 +10,63 @@ export interface Ingredient {
   note?: string;
 }
 
-// ─── Bilingual locale ──────────────────────────────────────────────────────────
+// ─── Nutrition (per 100 g/ml dell'ingrediente) ────────────────────────────────
+
+export interface NutritionPer100 {
+  energia_kcal: number;
+  grassi: number;
+  grassi_saturi: number;
+  carboidrati: number;
+  zuccheri: number;
+  proteine: number;
+  fibre: number;
+  sale: number;
+  extra?: Record<string, number>; // oligoelementi
+}
+
+// ─── Ingredient Dictionary entry (esteso) ────────────────────────────────────
+
+export interface DictionaryEntry {
+  canonicalId: string;
+  names: { it: string[]; ja: string[]; en: string[] };
+  defaultUnit?: "g" | "ml" | "";
+  isSolid?: boolean;
+  nutrition?: NutritionPer100;
+  peso_medio_unità?: number; // grammi per "1 unità" (es. 1 uovo = 60g)
+}
+
+export type IngredientDictionary = Record<string, DictionaryEntry>;
+
+// ─── Totali nutrizionali calcolati ────────────────────────────────────────────
+
+export interface NutritionTotals {
+  energia_kcal: number;
+  proteine: number;
+  carboidrati: number;
+  zuccheri: number;
+  grassi: number;
+  grassi_saturi: number;
+  fibre: number;
+  sale: number;
+  extra: Record<string, number>;
+  /** grammi totali conteggiati (ingredienti con nutrition trovata) */
+  gramsAccountedFor: number;
+}
+
+// ─── Shopping list ────────────────────────────────────────────────────────────
+
+export interface ShoppingListItem {
+  id: string;           // UUID
+  canonicalId: string;  // "" per voci manuali
+  displayName: string;
+  qty: number;          // 0 = nessuna quantità specificata
+  unit: "g" | "ml" | "";
+  checked: boolean;
+  isManual: boolean;
+  addedFrom?: string;   // titolo ricetta sorgente
+}
+
+// ─── Bilingual locale ─────────────────────────────────────────────────────────
 
 export interface RecipeLocale {
   title: string;
@@ -18,7 +74,7 @@ export interface RecipeLocale {
   steps: string[];
 }
 
-// ─── Recipe ────────────────────────────────────────────────────────────────────
+// ─── Recipe ───────────────────────────────────────────────────────────────────
 
 export type RecipeLanguage = "it" | "ja" | "en";
 
@@ -35,17 +91,16 @@ export interface Recipe {
   tags: string[];
   language: RecipeLanguage;
   starred?: boolean;
-  createdAt: string;             // ISO string
-  updatedAt?: string;            // ISO string — per merge cloud sync
+  createdAt: string;
+  updatedAt?: string;
   lastCooked?: string;
   source?: string;
   notes?: string;
-
-  /** Versione giapponese (opzionale). Presente solo se importata con === JP === */
+  personalNote?: string; // note private dell'utente
   ja?: RecipeLocale;
 }
 
-// ─── Parser ────────────────────────────────────────────────────────────────────
+// ─── Parser ───────────────────────────────────────────────────────────────────
 
 export interface RawIngredient {
   raw: string;
@@ -69,15 +124,11 @@ export interface ParsedResult {
   tags: string[];
   language: RecipeLanguage;
   warnings: string[];
-  ja?: {
-    title: string;
-    ingredients: RawIngredient[];
-    steps: string[];
-  };
+  ja?: { title: string; ingredients: RawIngredient[]; steps: string[] };
   isBilingual: boolean;
 }
 
-// ─── Timer ─────────────────────────────────────────────────────────────────────
+// ─── Timer ────────────────────────────────────────────────────────────────────
 
 export interface TimerState {
   id: string;
@@ -88,14 +139,14 @@ export interface TimerState {
   finished: boolean;
 }
 
-// ─── Daily Planner ─────────────────────────────────────────────────────────────
+// ─── Daily Planner (legacy, tenuto per compatibilità DB) ──────────────────────
 
 export interface DailyPlan {
   date: string;
   recipeIds: string[];
 }
 
-// ─── Settings ──────────────────────────────────────────────────────────────────
+// ─── Settings ─────────────────────────────────────────────────────────────────
 
 export interface AppSettings {
   language: RecipeLanguage;
@@ -103,13 +154,9 @@ export interface AppSettings {
   defaultServings: number;
 }
 
-// ─── Search ────────────────────────────────────────────────────────────────────
+// ─── Search ───────────────────────────────────────────────────────────────────
 
 export interface SearchFilters {
-  /**
-   * Testo libero — se contiene virgole (o 、) viene interpretato come
-   * lista di ingredienti in AND (tutti presenti nella ricetta).
-   */
   query: string;
   starred?: boolean;
   maxTime?: number;
@@ -117,42 +164,21 @@ export interface SearchFilters {
   recentOnly?: boolean;
 }
 
-/** Helper: estrae i termini ingrediente dalla query (split su , / 、 / ; ) */
 export function parseIngredientTerms(query: string): string[] {
   if (!query) return [];
-  // Divide su virgola italiana, giapponese, punto e virgola
-  return query
-    .split(/[,、;]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  return query.split(/[,、;]+/).map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
-/** True se la query è in "modalità multi-ingrediente" */
 export function isMultiIngredientQuery(query: string): boolean {
   return /[,、;]/.test(query);
 }
 
-// ─── Ingredient Dictionary ─────────────────────────────────────────────────────
-
-export interface DictionaryEntry {
-  canonicalId: string;
-  names: {
-    it: string[];
-    ja: string[];
-    en: string[];
-  };
-  defaultUnit?: "g" | "ml" | "";
-  isSolid?: boolean;
-}
-
-export type IngredientDictionary = Record<string, DictionaryEntry>;
-
-// ─── Cloud Sync ────────────────────────────────────────────────────────────────
+// ─── Cloud Sync ───────────────────────────────────────────────────────────────
 
 export type SyncStatus = "idle" | "syncing" | "synced" | "error" | "disabled";
 
 export interface SyncState {
   status: SyncStatus;
-  lastSync: string | null;       // ISO string
+  lastSync: string | null;
   error: string | null;
 }
