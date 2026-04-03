@@ -23,6 +23,15 @@
  * );
  * ALTER TABLE recipe_notes ENABLE ROW LEVEL SECURITY;
  * CREATE POLICY "anon_all" ON recipe_notes FOR ALL USING (true) WITH CHECK (true);
+ *
+ * -- Ingredienti custom:
+ * CREATE TABLE IF NOT EXISTS ingredient_overrides (
+ *   sync_id    text primary key,
+ *   data       jsonb not null default '{}'::jsonb,
+ *   updated_at timestamptz not null default now()
+ * );
+ * ALTER TABLE ingredient_overrides ENABLE ROW LEVEL SECURITY;
+ * CREATE POLICY "anon_all" ON ingredient_overrides FOR ALL USING (true) WITH CHECK (true);
  */
 
 import type { Recipe, ShoppingListItem } from "../types";

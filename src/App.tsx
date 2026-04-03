@@ -15,7 +15,8 @@ import HomePage          from "./pages/HomePage";
 import AddRecipePage     from "./pages/AddRecipePage";
 import RecipeDetailPage  from "./pages/RecipeDetailPage";
 import CookingModePage   from "./pages/CookingModePage";
-import ShoppingListPage  from "./pages/ShoppingListPage";
+import ShoppingListPage   from "./pages/ShoppingListPage";
+import IngredientsDBPage from "./pages/IngredientsDBPage";
 import EditRecipePage    from "./pages/EditRecipePage";
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -239,7 +240,8 @@ function AppShell() {
           <Route path="/ricette/:id"          element={<RecipeDetailPage />} />
           <Route path="/ricette/:id/modifica" element={<EditRecipePage />} />
           <Route path="/cucina/:id"           element={<CookingModePage />} />
-          <Route path="/lista"                element={<ShoppingListPage />} />
+          <Route path="/lista"               element={<ShoppingListPage />} />
+          <Route path="/ingredienti"         element={<IngredientsDBPage />} />
           <Route path="*"                     element={<NotFound />} />
         </Routes>
       </main>

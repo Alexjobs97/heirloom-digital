@@ -1,148 +1,203 @@
 /**
- * nutrition.ts — Calcolo valori nutrizionali da ingredienti scalati.
- *
- * Regole quantità:
- *  - unit "g" o "ml" → qty grammi/ml, confronta con valori per 100g
- *  - unit ""          → qty unità × peso_medio_unità (grammi)
- *  - "q.b."           → skip, eccetto olio → 10 ml
- *  - ingredienti senza dati nutrition → skip silenziosamente
+ * nutrition.ts v2 — Calcolo nutrizionale con breakdown per-ingrediente.
+ * Usa resolveIngredient() che controlla custom prima del dizionario built-in.
  */
 
 import type { Ingredient, NutritionTotals } from "../types";
-import { INGREDIENT_DICTIONARY } from "./ingredients";
+import { resolveIngredient } from "./customIngredients";
 
-// ── Helper: peso in grammi da un ingrediente scalato ─────────────────────────
+// ── Status per ingrediente ────────────────────────────────────────────────────
 
-function toGrams(ing: Ingredient): number | null {
-  const entry = INGREDIENT_DICTIONARY[ing.canonicalId];
-  if (!entry?.nutrition) return null;
+export type IngredientStatus = "counted" | "not_found" | "skipped" | "no_unit";
+
+export interface IngredientNutritionRow {
+  ingredient:    Ingredient;
+  status:        IngredientStatus;
+  grams:         number;                // grammi conteggiati (0 se non conteggiato)
+  contribution?: {
+    energia_kcal: number;
+    proteine:     number;
+    carboidrati:  number;
+    grassi:       number;
+  };
+  message?:      string;               // nota human-readable
+}
+
+// ── Calcolo grammi ────────────────────────────────────────────────────────────
+
+function toGrams(ing: Ingredient): { grams: number; status: IngredientStatus; message?: string } {
+  const entry = resolveIngredient(ing.canonicalId);
 
   const raw = ing.qty;
 
-  // q.b. → skip (eccetto olio = 10ml)
+  // q.b. / a piacere
   if (typeof raw === "string") {
-    const lower = raw.toLowerCase();
-    if (lower === "q.b." || lower === "qb" || lower === "a piacere") {
-      // olio → 10 ml
-      const isOil = ["oil", "olive_oil", "sesame_oil", "olio"].some((k) =>
-        ing.canonicalId.includes(k) || ing.displayName.toLowerCase().includes("olio")
-      );
-      return isOil ? 10 : null;
+    const lower = raw.toLowerCase().trim();
+    if (lower === "q.b." || lower === "qb" || lower === "a piacere" || lower === "" || lower === "—") {
+      // Olio: q.b. = 10ml
+      const isOil =
+        ing.canonicalId.includes("oil") ||
+        ing.canonicalId.includes("olio") ||
+        ing.displayName.toLowerCase().includes("olio") ||
+        ing.displayName.toLowerCase().includes("oil");
+      if (isOil) return { grams: 10, status: entry?.nutrition ? "counted" : "not_found", message: "q.b. → 10 ml" };
+      return { grams: 0, status: "skipped", message: "q.b. escluso" };
     }
-    return null;
+    // Altro testo non numerico
+    return { grams: 0, status: "skipped", message: `Quantità testuale: "${raw}"` };
   }
 
   const qty = typeof raw === "number" ? raw : parseFloat(String(raw));
-  if (isNaN(qty) || qty <= 0) return null;
+  if (isNaN(qty) || qty <= 0) return { grams: 0, status: "skipped", message: "Quantità non valida" };
 
+  if (!entry) return { grams: 0, status: "not_found", message: "Ingrediente non trovato nel database" };
+  if (!entry.nutrition) return { grams: 0, status: "not_found", message: "Nessun dato nutrizionale nel database" };
+
+  // g o ml → diretto
   if (ing.unit === "g" || ing.unit === "ml") {
-    return qty; // già in grammi/ml, trattati equivalenti per ora
+    return { grams: qty, status: "counted" };
   }
 
   // Nessuna unità → "N unità di X"
-  const unitWeight = entry.peso_medio_unità;
-  if (unitWeight && unitWeight > 0) {
-    return qty * unitWeight;
+  if (entry.peso_medio_unità && entry.peso_medio_unità > 0) {
+    return {
+      grams: qty * entry.peso_medio_unità,
+      status: "counted",
+      message: `${qty} × ${entry.peso_medio_unità}g/unità`,
+    };
   }
 
-  // Fallback: se defaultUnit è g, assume grammi
-  if (entry.defaultUnit === "g") return qty;
+  // Fallback: se defaultUnit è g, assume grammi diretti
+  if (entry.defaultUnit === "g") {
+    return { grams: qty, status: "counted", message: "Assunto in grammi" };
+  }
 
-  return null;
+  return { grams: 0, status: "no_unit", message: "Unità non convertibile (manca peso_medio_unità)" };
 }
 
 // ── Calcolo principale ────────────────────────────────────────────────────────
 
-const EMPTY: NutritionTotals = {
-  energia_kcal: 0,
-  proteine: 0,
-  carboidrati: 0,
-  zuccheri: 0,
-  grassi: 0,
-  grassi_saturi: 0,
-  fibre: 0,
-  sale: 0,
-  extra: {},
-  gramsAccountedFor: 0,
+const EMPTY_TOTALS: NutritionTotals = {
+  energia_kcal: 0, proteine: 0, carboidrati: 0, zuccheri: 0,
+  grassi: 0, grassi_saturi: 0, fibre: 0, sale: 0,
+  extra: {}, gramsAccountedFor: 0,
 };
 
-/**
- * Calcola i totali nutrizionali per una lista di ingredienti già scalati.
- * Ritorna null se nessun ingrediente ha dati nutrizionali.
- */
-export function calculateNutrition(ingredients: Ingredient[]): NutritionTotals | null {
-  let found = false;
-  const totals: NutritionTotals = { ...EMPTY, extra: {} };
+export interface NutritionResult {
+  totals:  NutritionTotals;
+  rows:    IngredientNutritionRow[];
+  /** % di ingredienti trovati nel dizionario (esclude skipped) */
+  coveragePercent: number;
+}
+
+export function calculateNutritionDetailed(ingredients: Ingredient[]): NutritionResult {
+  const rows: IngredientNutritionRow[] = [];
+  const totals: NutritionTotals = { ...EMPTY_TOTALS, extra: {} };
+  let countedN = 0;
+  let totalRelevant = 0;
 
   for (const ing of ingredients) {
-    const entry = INGREDIENT_DICTIONARY[ing.canonicalId];
-    if (!entry?.nutrition) continue;
+    const { grams, status, message } = toGrams(ing);
 
-    const grams = toGrams(ing);
-    if (grams === null || grams <= 0) continue;
+    if (status === "skipped") {
+      rows.push({ ingredient: ing, status, grams: 0, message });
+      continue;
+    }
 
-    found = true;
+    totalRelevant++;
+
+    const entry = resolveIngredient(ing.canonicalId);
+    if (status !== "counted" || !entry?.nutrition || grams <= 0) {
+      rows.push({ ingredient: ing, status, grams, message });
+      continue;
+    }
+
+    countedN++;
     const factor = grams / 100;
-    const n = entry.nutrition;
+    const n      = entry.nutrition;
 
-    totals.energia_kcal    += (n.energia_kcal    ?? 0) * factor;
-    totals.proteine         += (n.proteine         ?? 0) * factor;
-    totals.carboidrati      += (n.carboidrati      ?? 0) * factor;
-    totals.zuccheri         += (n.zuccheri         ?? 0) * factor;
-    totals.grassi           += (n.grassi           ?? 0) * factor;
-    totals.grassi_saturi    += (n.grassi_saturi    ?? 0) * factor;
-    totals.fibre            += (n.fibre            ?? 0) * factor;
-    totals.sale             += (n.sale             ?? 0) * factor;
+    const contrib = {
+      energia_kcal: round1((n.energia_kcal    ?? 0) * factor),
+      proteine:      round1((n.proteine         ?? 0) * factor),
+      carboidrati:   round1((n.carboidrati      ?? 0) * factor),
+      grassi:        round1((n.grassi           ?? 0) * factor),
+    };
+
+    totals.energia_kcal    += contrib.energia_kcal;
+    totals.proteine         += contrib.proteine;
+    totals.carboidrati      += contrib.carboidrati;
+    totals.zuccheri         += round1((n.zuccheri      ?? 0) * factor);
+    totals.grassi           += contrib.grassi;
+    totals.grassi_saturi    += round1((n.grassi_saturi ?? 0) * factor);
+    totals.fibre            += round1((n.fibre          ?? 0) * factor);
+    totals.sale             += round2((n.sale           ?? 0) * factor);
     totals.gramsAccountedFor += grams;
 
     if (n.extra) {
       for (const [key, val] of Object.entries(n.extra)) {
-        totals.extra[key] = (totals.extra[key] ?? 0) + (val ?? 0) * factor;
+        totals.extra[key] = round1((totals.extra[key] ?? 0) + (val ?? 0) * factor);
       }
     }
+
+    rows.push({ ingredient: ing, status, grams: round0(grams), contribution: contrib, message });
   }
 
-  return found ? roundTotals(totals) : null;
+  // Arrotondamento finale totali
+  const finalTotals = roundTotals(totals);
+
+  return {
+    totals: finalTotals,
+    rows,
+    coveragePercent: totalRelevant > 0 ? Math.round((countedN / totalRelevant) * 100) : 100,
+  };
 }
 
+/** Shortcut — solo totali */
+export function calculateNutrition(ingredients: Ingredient[]): NutritionTotals | null {
+  const { totals, rows } = calculateNutritionDetailed(ingredients);
+  const hasSomething = rows.some((r) => r.status === "counted");
+  return hasSomething ? totals : null;
+}
+
+// ── Helpers arrotondamento ────────────────────────────────────────────────────
+
+function round0(v: number) { return Math.round(v); }
+function round1(v: number) { return Math.round(v * 10) / 10; }
+function round2(v: number) { return Math.round(v * 100) / 100; }
+
 function roundTotals(t: NutritionTotals): NutritionTotals {
-  const r = (v: number, dec = 1) => Math.round(v * 10 ** dec) / 10 ** dec;
   return {
-    energia_kcal:     Math.round(t.energia_kcal),
-    proteine:         r(t.proteine),
-    carboidrati:      r(t.carboidrati),
-    zuccheri:         r(t.zuccheri),
-    grassi:           r(t.grassi),
-    grassi_saturi:    r(t.grassi_saturi),
-    fibre:            r(t.fibre),
-    sale:             r(t.sale, 2),
-    extra:            Object.fromEntries(
-      Object.entries(t.extra).map(([k, v]) => [k, r(v)])
-    ),
-    gramsAccountedFor: Math.round(t.gramsAccountedFor),
+    energia_kcal:      Math.round(t.energia_kcal),
+    proteine:           round1(t.proteine),
+    carboidrati:        round1(t.carboidrati),
+    zuccheri:           round1(t.zuccheri),
+    grassi:             round1(t.grassi),
+    grassi_saturi:      round1(t.grassi_saturi),
+    fibre:              round1(t.fibre),
+    sale:               round2(t.sale),
+    extra:              t.extra,
+    gramsAccountedFor:  Math.round(t.gramsAccountedFor),
   };
 }
 
 // ── Label helpers ─────────────────────────────────────────────────────────────
 
-/** Formatta una chiave "extra" in label leggibile (es. "potassio_mg" → "Potassio") */
 export function formatExtraKey(key: string): { label: string; unit: string } {
   const parts = key.split("_");
-  const unit  = ["mg", "mcg", "ug", "iu"].includes(parts[parts.length - 1])
-    ? parts.pop()!
-    : "";
+  const unit = ["mg","mcg","ug","iu"].includes(parts[parts.length - 1]) ? parts.pop()! : "";
   const label = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
   return { label, unit };
 }
 
-/** Macro principali da mostrare nella tabella compatta */
-export const MACRO_ROWS: Array<{ key: keyof NutritionTotals; label: string; unit: string; indent?: boolean }> = [
-  { key: "energia_kcal", label: "Energia",        unit: "kcal" },
-  { key: "grassi",       label: "Grassi",          unit: "g"    },
-  { key: "grassi_saturi",label: "di cui saturi",   unit: "g", indent: true },
-  { key: "carboidrati",  label: "Carboidrati",      unit: "g"    },
-  { key: "zuccheri",     label: "di cui zuccheri", unit: "g", indent: true },
-  { key: "proteine",     label: "Proteine",         unit: "g"    },
-  { key: "fibre",        label: "Fibre",            unit: "g"    },
-  { key: "sale",         label: "Sale",             unit: "g"    },
+export const MACRO_ROWS: Array<{
+  key: keyof NutritionTotals; label: string; unit: string; indent?: boolean;
+}> = [
+  { key: "energia_kcal",  label: "Energia",          unit: "kcal" },
+  { key: "grassi",        label: "Grassi",            unit: "g"    },
+  { key: "grassi_saturi", label: "di cui saturi",     unit: "g", indent: true },
+  { key: "carboidrati",   label: "Carboidrati",       unit: "g"    },
+  { key: "zuccheri",      label: "di cui zuccheri",   unit: "g", indent: true },
+  { key: "proteine",      label: "Proteine",          unit: "g"    },
+  { key: "fibre",         label: "Fibre",             unit: "g"    },
+  { key: "sale",          label: "Sale",              unit: "g"    },
 ];

@@ -17,7 +17,7 @@ import ServingsSlider from "../components/ServingsSlider";
 import IngredientRow from "../components/IngredientRow";
 import { useTranslation } from "../i18n/useTranslation";
 import { useLang } from "../i18n/LangContext";
-import { calculateNutrition, MACRO_ROWS, formatExtraKey } from "../lib/nutrition";
+import NutritionModal from "./NutritionModal";
 
 // ── Icone ─────────────────────────────────────────────────────────────────────
 function IconBack()      { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="18" height="18"><polyline points="15 18 9 12 15 6"/></svg>; }
@@ -66,7 +66,7 @@ function AddToListModal({ ingredients, recipeTitle, onClose }: {
   const { addFromRecipe } = useShoppingList();
   const { locale } = useTranslation();
   const filtered = ingredients.filter((i) => { const q = i.qty; return !(typeof q === "string" && (q==="q.b."||q==="qb")); });
-  const [sel, setSel] = useState<Set<string>>(new Set(filtered.filter((i) => i.checked).map((i) => i.id)));
+  const [sel, setSel] = useState<Set<string>>(new Set(filtered.filter((i) => !i.checked).map((i) => i.id)));
   const toggle = (id: string) => setSel((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allOn = sel.size === filtered.length;
   const handle = () => {
@@ -107,97 +107,6 @@ function AddToListModal({ ingredients, recipeTitle, onClose }: {
 }
 
 // ── Modale: Valori nutrizionali ────────────────────────────────────────────────
-function NutritionModal({ ingredients, servings, baseYield, onClose }: {
-  ingredients: Ingredient[]; servings: number; baseYield: number; onClose: () => void;
-}) {
-  const { locale } = useTranslation();
-  const [showExtra, setShowExtra] = useState(false);
-  const totals = useMemo(() => calculateNutrition(ingredients), [ingredients]);
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-          <h3 style={{ margin: 0 }}>{locale==="ja" ? "栄養成分" : "Valori nutrizionali"}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex" }}><IconX /></button>
-        </div>
-        <p style={{ margin: "0 0 0.875rem", fontSize: "0.78rem", color: "var(--text-muted)" }}>
-          {locale==="ja" ? `${servings}人分・概算値` : `Per ${servings} ${servings===1?"porzione":"porzioni"} · valori approssimativi`}
-        </p>
-
-        {!totals ? (
-          <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", textAlign: "center", padding: "2rem 0" }}>
-            {locale==="ja" ? "栄養データが見つかりません" : "Dati nutrizionali non disponibili per questa ricetta"}
-          </p>
-        ) : (
-          <>
-            {/* Macro donut-like highlight */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem", marginBottom: "1.25rem" }}>
-              {[
-                { label: locale==="ja" ? "エネルギー" : "Energia", value: `${totals.energia_kcal}`, unit: "kcal", color: "var(--brand)" },
-                { label: locale==="ja" ? "たんぱく質" : "Proteine", value: `${totals.proteine}`, unit: "g", color: "#4CAF50" },
-                { label: locale==="ja" ? "炭水化物" : "Carbo", value: `${totals.carboidrati}`, unit: "g", color: "#FF9800" },
-              ].map((m) => (
-                <div key={m.label} style={{ background: "var(--bg-page)", borderRadius: "var(--radius-md)", padding: "0.75rem 0.5rem", textAlign: "center", border: "1px solid var(--border)" }}>
-                  <div style={{ fontSize: "1.3rem", fontWeight: 700, color: m.color, fontFamily: "var(--font-serif)" }}>{m.value}</div>
-                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 700 }}>{m.unit}</div>
-                  <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginTop: 2 }}>{m.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Tabella macros */}
-            <table className="nutrition-table">
-              <tbody>
-                {MACRO_ROWS.map((row) => {
-                  if (row.key === "energia_kcal") return null; // già mostrata sopra
-                  const val = totals[row.key as keyof typeof totals];
-                  if (typeof val !== "number") return null;
-                  return (
-                    <tr key={row.key} className={row.indent ? "indent" : ""}>
-                      <td>{row.label}</td>
-                      <td>{val} {row.unit}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {/* Extra / oligoelementi */}
-            {Object.keys(totals.extra).length > 0 && (
-              <div style={{ marginTop: "0.875rem" }}>
-                <button onClick={() => setShowExtra((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--brand)", fontWeight: 700, fontSize: "0.82rem", padding: "0.25rem 0" }}>
-                  <span style={{ transform: showExtra ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "flex" }}><IconChevron /></span>
-                  {locale==="ja" ? "その他の栄養素" : "Oligoelementi e micronutrienti"}
-                </button>
-                {showExtra && (
-                  <table className="nutrition-table" style={{ marginTop: "0.5rem", animation: "fadeIn 0.2s ease" }}>
-                    <tbody>
-                      {Object.entries(totals.extra).map(([key, val]) => {
-                        const { label, unit } = formatExtraKey(key);
-                        return (
-                          <tr key={key}>
-                            <td>{label}</td>
-                            <td>{val} {unit}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )}
-
-            <p style={{ margin: "0.875rem 0 0", fontSize: "0.68rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {locale==="ja" ? "値は概算です。食材のデータがない場合は計算に含まれません。" : "Valori calcolati sulla base degli ingredienti con dati disponibili. Gli ingredienti q.b. (eccetto olio) sono esclusi."}
-            </p>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Delete modal ───────────────────────────────────────────────────────────────
 function DeleteModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   const { t } = useTranslation();
@@ -438,7 +347,7 @@ export default function RecipeDetailPage() {
       {toast.msg && <div className="toast" role="status">{toast.msg}</div>}
       {showDelete    && <DeleteModal onConfirm={handleDelete} onCancel={() => setShowDelete(false)} />}
       {showAddList   && <AddToListModal ingredients={scaledWithCheck} recipeTitle={localized.title} onClose={() => { setShowAddList(false); toast.show("🛒 " + (locale==="ja" ? "リストに追加しました" : "Aggiunto alla lista!")); }} />}
-      {showNutrition && <NutritionModal ingredients={baseScaled} servings={currentServings} baseYield={recipe.yield} onClose={() => setShowNutrition(false)} />}
+      {showNutrition && <NutritionModal ingredients={baseScaled} servings={currentServings} onClose={() => setShowNutrition(false)} />}
     </div>
   );
 }
