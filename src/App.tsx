@@ -21,8 +21,8 @@ import EditRecipePage    from "./pages/EditRecipePage";
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
 
-const IconBook     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
-const IconPlus     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="22" height="22"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+const IconHome     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+const IconSearch   = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
 const IconCart     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>;
 const IconMoon     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
 const IconSun      = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="17" height="17"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>;
@@ -157,22 +157,27 @@ function Header({ dark, onToggleDark, syncProps }: { dark: boolean; onToggleDark
 // ─── Bottom Navigation ────────────────────────────────────────────────────────
 
 function BottomNav() {
-  const { t, locale } = useTranslation();
+  const { locale } = useTranslation();
   const location = useLocation();
   if (location.pathname.startsWith("/cucina/")) return null;
 
   const items = [
-    { to: "/",         label: locale === "ja" ? "レシピ" : "Ricette",  Icon: IconBook  },
-    { to: "/aggiungi", label: locale === "ja" ? "追加" : "Aggiungi",   Icon: IconPlus  },
-    { to: "/lista",    label: locale === "ja" ? "買い物" : "Lista",    Icon: IconCart  },
+    { to: "/",           label: locale === "ja" ? "ホーム" : "Home",     Icon: IconHome   },
+    { to: "/?search=1",  label: locale === "ja" ? "検索" : "Cerca",      Icon: IconSearch },
+    { to: "/lista",      label: locale === "ja" ? "買い物" : "Lista",    Icon: IconCart   },
   ];
 
   return (
     <nav className="bottom-nav">
       {items.map(({ to, label, Icon }) => {
-        const isActive = to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
+        const basePath = to.split("?")[0];
+        const isActive = basePath === "/" 
+          ? location.pathname === "/" && !location.search.includes("search=1")
+          : basePath === "/?search=1".split("?")[0] && location.search.includes("search=1")
+            ? true
+            : location.pathname.startsWith(basePath) && basePath !== "/";
         return (
-          <NavLink key={to} to={to} end={to === "/"} className={`bottom-nav-item${isActive ? " active" : ""}`}>
+          <NavLink key={to} to={to} className={`bottom-nav-item${isActive ? " active" : ""}`}>
             <span className="nav-icon"><Icon /></span>
             <span>{label}</span>
           </NavLink>

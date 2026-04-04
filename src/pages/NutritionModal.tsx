@@ -1,6 +1,5 @@
 /**
- * NutritionModal.tsx — Modale valori nutrizionali con breakdown per ingrediente.
- * Mostra chiaramente quali ingredienti sono stati trovati/mancanti.
+ * NutritionModal.tsx — Premium nutrition facts modal with expandable extras.
  */
 
 import { useState, useRef } from "react";
@@ -9,21 +8,22 @@ import type { Ingredient } from "../types";
 import { calculateNutritionDetailed, MACRO_ROWS, formatExtraKey } from "../lib/nutrition";
 import { useTranslation } from "../i18n/useTranslation";
 
-const IconX       = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-const IconChevron = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>;
-const IconDB      = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
+// ── Icons ─────────────────────────────────────────────────────────────────────
+const IconX       = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="20" height="20"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+const IconChevron = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><polyline points="6 9 12 15 18 9"/></svg>;
+const IconDB      = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
 
-// Colori status
+// ── Status styling ────────────────────────────────────────────────────────────
 function statusColor(status: string): string {
   if (status === "counted")   return "#5CB85C";
   if (status === "not_found") return "#E74C3C";
   if (status === "no_unit")   return "#F5A623";
-  return "var(--text-muted)"; // skipped
+  return "var(--text-muted)";
 }
 function statusIcon(status: string): string {
   if (status === "counted")   return "✓";
-  if (status === "not_found") return "✗";
-  if (status === "no_unit")   return "⚠";
+  if (status === "not_found") return "?";
+  if (status === "no_unit")   return "!";
   return "—";
 }
 function statusLabel(status: string, locale: string): string {
@@ -33,10 +33,10 @@ function statusLabel(status: string, locale: string): string {
     if (status === "no_unit")   return "単位不明";
     return "スキップ";
   }
-  if (status === "counted")   return "Conteggiato";
+  if (status === "counted")   return "Calcolato";
   if (status === "not_found") return "Non trovato";
-  if (status === "no_unit")   return "Unità mancante";
-  return "Escluso (q.b.)";
+  if (status === "no_unit")   return "Unita mancante";
+  return "Escluso";
 }
 
 interface Props {
@@ -51,10 +51,6 @@ export default function NutritionModal({ ingredients, servings, onClose }: Props
   const [showExtra,     setShowExtra]     = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
-  // Calcola sempre fresco (niente memo): così le modifiche al DB custom
-  // ingredienti si riflettono immediatamente alla prossima apertura del modal.
-  // Il modal è un componente separato che monta/smonta ad ogni apertura,
-  // quindi non c'è rischio di ricalcoli inutili.
   const resultRef = useRef(calculateNutritionDetailed(ingredients));
   const result = resultRef.current;
   const { totals, rows, coveragePercent } = result;
@@ -63,200 +59,165 @@ export default function NutritionModal({ ingredients, servings, onClose }: Props
   const notFound     = rows.filter((r) => r.status === "not_found" || r.status === "no_unit");
   const counted      = rows.filter((r) => r.status === "counted");
   const skipped      = rows.filter((r) => r.status === "skipped");
+  const extraKeys    = Object.keys(totals.extra);
 
   const isJa = locale === "ja";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ paddingBottom: "2.5rem" }}>
+      <div className="modal nutrition-modal" onClick={(e) => e.stopPropagation()}>
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-          <h3 style={{ margin: 0 }}>{isJa ? "栄養成分" : "Valori nutrizionali"}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex" }}>
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div className="nutrition-header">
+          <div>
+            <h3 className="nutrition-title">{isJa ? "栄養成分表" : "Valori Nutrizionali"}</h3>
+            <p className="nutrition-subtitle">
+              {isJa ? `${servings}人分 · 概算値` : `${servings} ${servings === 1 ? "porzione" : "porzioni"} · valori approssimativi`}
+            </p>
+          </div>
+          <button onClick={onClose} className="nutrition-close" aria-label="Close">
             <IconX />
           </button>
         </div>
 
-        <p style={{ margin: "0 0 0.875rem", fontSize: "0.78rem", color: "var(--text-muted)" }}>
-          {isJa ? `${servings}人分・概算値` : `Per ${servings} ${servings === 1 ? "porzione" : "porzioni"} · valori approssimativi`}
-        </p>
-
-        {/* Badge copertura */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: "0.625rem",
-          padding: "0.625rem 0.875rem", borderRadius: "var(--radius-md)",
-          background: coveragePercent >= 80
-            ? "rgba(92,184,92,0.10)"
-            : coveragePercent >= 50
-            ? "rgba(245,166,35,0.10)"
-            : "rgba(231,76,60,0.10)",
-          border: `1px solid ${coveragePercent >= 80 ? "rgba(92,184,92,0.25)" : coveragePercent >= 50 ? "rgba(245,166,35,0.25)" : "rgba(231,76,60,0.25)"}`,
-          marginBottom: "1rem",
-        }}>
-          <div style={{
-            fontSize: "1.1rem", fontWeight: 800,
-            color: coveragePercent >= 80 ? "#5CB85C" : coveragePercent >= 50 ? "#F5A623" : "#E74C3C",
-          }}>
-            {coveragePercent}%
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-primary)" }}>
-              {isJa ? "認識率" : "Ingredienti riconosciuti"}
-            </div>
-            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-              {counted.length} {isJa ? "個計算済み" : "conteggiati"} · {notFound.length} {isJa ? "個不明" : "non trovati"} · {skipped.length} {isJa ? "個スキップ" : "esclusi (q.b.)"}
-            </div>
+        {/* ── Coverage badge ────────────────────────────────────────────── */}
+        <div className={`coverage-badge ${coveragePercent >= 80 ? "good" : coveragePercent >= 50 ? "ok" : "low"}`}>
+          <div className="coverage-percent">{coveragePercent}%</div>
+          <div className="coverage-text">
+            <strong>{isJa ? "認識率" : "Copertura"}</strong>
+            <span>
+              {counted.length} {isJa ? "計算済み" : "calcolati"} · {notFound.length} {isJa ? "不明" : "mancanti"} · {skipped.length} {isJa ? "除外" : "esclusi"}
+            </span>
           </div>
           {notFound.length > 0 && (
-            <button
-              onClick={() => { onClose(); navigate("/ingredienti"); }}
-              style={{ background: "none", border: "1px solid rgba(231,76,60,0.4)", borderRadius: "var(--radius-sm)", cursor: "pointer", color: "#E74C3C", padding: "0.3rem 0.5rem", fontSize: "0.7rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.3rem", whiteSpace: "nowrap" }}>
+            <button onClick={() => { onClose(); navigate("/ingredienti"); }} className="coverage-action">
               <IconDB /> {isJa ? "追加" : "Aggiungi"}
             </button>
           )}
         </div>
 
         {!hasSomething ? (
-          <div style={{ textAlign: "center", padding: "2rem 0" }}>
-            <p style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🔍</p>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-              {isJa ? "栄養データが見つかりません" : "Nessun ingrediente trovato nel database"}
-            </p>
-            <button className="btn btn-secondary" onClick={() => { onClose(); navigate("/ingredienti"); }} style={{ marginTop: "1rem", gap: "0.35rem" }}>
-              <IconDB /> {isJa ? "データベースを開く" : "Apri database ingredienti"}
+          /* ── Empty state ──────────────────────────────────────────────── */
+          <div className="nutrition-empty">
+            <div className="empty-icon">?</div>
+            <p>{isJa ? "栄養データが見つかりません" : "Nessun dato nutrizionale trovato"}</p>
+            <button className="btn btn-secondary" onClick={() => { onClose(); navigate("/ingredienti"); }}>
+              <IconDB /> {isJa ? "データベースを開く" : "Apri database"}
             </button>
           </div>
         ) : (
           <>
-            {/* Macro highlight */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem", marginBottom: "1.25rem" }}>
-              {[
-                { label: isJa ? "エネルギー" : "Energia",  value: `${totals.energia_kcal}`, unit: "kcal", color: "var(--brand)" },
-                { label: isJa ? "たんぱく質" : "Proteine", value: `${totals.proteine}`,      unit: "g",    color: "#5CB85C" },
-                { label: isJa ? "炭水化物"   : "Carbo",    value: `${totals.carboidrati}`,   unit: "g",    color: "#3498DB" },
-              ].map((m) => (
-                <div key={m.label} style={{ background: "var(--bg-page)", borderRadius: "var(--radius-md)", padding: "0.75rem 0.5rem", textAlign: "center", border: "1px solid var(--border)" }}>
-                  <div style={{ fontSize: "1.35rem", fontWeight: 700, color: m.color, fontFamily: "var(--font-serif)", lineHeight: 1 }}>{m.value}</div>
-                  <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 700, marginTop: "0.1rem" }}>{m.unit}</div>
-                  <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>{m.label}</div>
-                </div>
-              ))}
+            {/* ── Macro highlights ────────────────────────────────────────── */}
+            <div className="macro-highlights">
+              <div className="macro-card energy">
+                <span className="macro-value">{totals.energia_kcal}</span>
+                <span className="macro-unit">kcal</span>
+                <span className="macro-label">{isJa ? "エネルギー" : "Energia"}</span>
+              </div>
+              <div className="macro-card protein">
+                <span className="macro-value">{totals.proteine}</span>
+                <span className="macro-unit">g</span>
+                <span className="macro-label">{isJa ? "たんぱく質" : "Proteine"}</span>
+              </div>
+              <div className="macro-card carbs">
+                <span className="macro-value">{totals.carboidrati}</span>
+                <span className="macro-unit">g</span>
+                <span className="macro-label">{isJa ? "炭水化物" : "Carboidrati"}</span>
+              </div>
+              <div className="macro-card fats">
+                <span className="macro-value">{totals.grassi}</span>
+                <span className="macro-unit">g</span>
+                <span className="macro-label">{isJa ? "脂質" : "Grassi"}</span>
+              </div>
             </div>
 
-            {/* Tabella macro */}
-            <table className="nutrition-table">
-              <tbody>
-                {MACRO_ROWS.filter((r) => r.key !== "energia_kcal").map((row) => {
-                  const val = totals[row.key as keyof typeof totals];
-                  if (typeof val !== "number") return null;
-                  return (
-                    <tr key={row.key} className={row.indent ? "indent" : ""}>
-                      <td>{row.label}</td>
-                      <td>{val} {row.unit}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {/* ── Detailed macros table ────────────────────────────────────── */}
+            <div className="nutrition-details">
+              <table className="nutrition-table">
+                <tbody>
+                  {MACRO_ROWS.filter((r) => r.key !== "energia_kcal").map((row) => {
+                    const val = totals[row.key as keyof typeof totals];
+                    if (typeof val !== "number") return null;
+                    return (
+                      <tr key={row.key} className={row.indent ? "indent" : ""}>
+                        <td>{row.label}</td>
+                        <td>{val} {row.unit}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-            {/* Oligoelementi */}
-            {Object.keys(totals.extra).length > 0 && (
-              <div style={{ marginTop: "0.875rem" }}>
-                <button onClick={() => setShowExtra((v) => !v)}
-                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--brand)", fontWeight: 700, fontSize: "0.82rem", padding: "0.25rem 0" }}>
-                  <span style={{ transform: showExtra ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "flex" }}><IconChevron /></span>
-                  {isJa ? "その他の栄養素" : "Oligoelementi"}
+            {/* ── Expandable extras ─────────────────────────────────────────── */}
+            {extraKeys.length > 0 && (
+              <div className="nutrition-section">
+                <button onClick={() => setShowExtra((v) => !v)} className="section-toggle">
+                  <span className={`toggle-icon ${showExtra ? "open" : ""}`}><IconChevron /></span>
+                  <span>{isJa ? "ビタミン・ミネラル" : "Vitamine e Minerali"}</span>
+                  <span className="toggle-count">{extraKeys.length}</span>
                 </button>
                 {showExtra && (
-                  <table className="nutrition-table" style={{ marginTop: "0.5rem", animation: "fadeIn 0.2s ease" }}>
-                    <tbody>
-                      {Object.entries(totals.extra).map(([key, val]) => {
-                        const { label, unit } = formatExtraKey(key);
-                        return (
-                          <tr key={key}><td>{label}</td><td>{val} {unit}</td></tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="extras-grid">
+                    {extraKeys.map((key) => {
+                      const { label, unit } = formatExtraKey(key);
+                      return (
+                        <div key={key} className="extra-item">
+                          <span className="extra-label">{label}</span>
+                          <span className="extra-value">{totals.extra[key]} {unit}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Breakdown per ingrediente */}
-            <div style={{ marginTop: "1.25rem" }}>
-              <button onClick={() => setShowBreakdown((v) => !v)}
-                style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--text-muted)", fontWeight: 600, fontSize: "0.8rem", padding: "0.25rem 0", width: "100%" }}>
-                <span style={{ transform: showBreakdown ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "flex" }}><IconChevron /></span>
-                {isJa ? "食材の詳細" : `Dettaglio per ingrediente (${rows.length})`}
+            {/* ── Ingredient breakdown ──────────────────────────────────────── */}
+            <div className="nutrition-section">
+              <button onClick={() => setShowBreakdown((v) => !v)} className="section-toggle">
+                <span className={`toggle-icon ${showBreakdown ? "open" : ""}`}><IconChevron /></span>
+                <span>{isJa ? "食材の詳細" : "Dettaglio ingredienti"}</span>
+                <span className="toggle-count">{rows.length}</span>
               </button>
 
               {showBreakdown && (
-                <div style={{ marginTop: "0.625rem", display: "flex", flexDirection: "column", gap: "0.3rem", animation: "fadeIn 0.2s ease" }}>
+                <div className="breakdown-list">
                   {rows.map((row, i) => (
-                    <div key={i} style={{
-                      display: "flex", alignItems: "center", gap: "0.5rem",
-                      padding: "0.5rem 0.625rem",
-                      background: "var(--bg-page)", borderRadius: "var(--radius-sm)",
-                      opacity: row.status === "skipped" ? 0.55 : 1,
-                    }}>
-                      {/* Status badge */}
-                      <span style={{
-                        width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "0.65rem", fontWeight: 800,
-                        color: statusColor(row.status),
-                        background: `${statusColor(row.status)}18`,
-                      }}>
+                    <div key={i} className={`breakdown-item ${row.status}`}>
+                      <span className="breakdown-status" style={{ background: `${statusColor(row.status)}20`, color: statusColor(row.status) }}>
                         {statusIcon(row.status)}
                       </span>
-
-                      {/* Nome + nota */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "0.82rem", color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div className="breakdown-info">
+                        <span className="breakdown-name">
                           {row.ingredient.displayName}
-                          {row.grams > 0 && (
-                            <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.35rem" }}>
-                              · {row.grams} g
-                            </span>
-                          )}
-                        </div>
-                        {row.message && (
-                          <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{row.message}</div>
-                        )}
-                      </div>
-
-                      {/* Contributo kcal */}
-                      {row.contribution ? (
-                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--brand)", flexShrink: 0 }}>
-                          {row.contribution.energia_kcal} kcal
+                          {row.grams > 0 && <span className="breakdown-grams"> · {row.grams}g</span>}
                         </span>
-                      ) : row.status !== "skipped" ? (
+                        {row.message && <span className="breakdown-message">{row.message}</span>}
+                      </div>
+                      {row.contribution ? (
+                        <span className="breakdown-kcal">{row.contribution.energia_kcal} kcal</span>
+                      ) : row.status !== "skipped" && (
                         <button
                           onClick={() => { onClose(); navigate("/ingredienti?q=" + encodeURIComponent(row.ingredient.displayName)); }}
-                          style={{ fontSize: "0.65rem", background: "rgba(231,76,60,0.12)", border: "1px solid rgba(231,76,60,0.3)", borderRadius: "var(--radius-sm)", color: "#E74C3C", cursor: "pointer", padding: "0.2rem 0.4rem", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
-                          + Aggiungi
+                          className="breakdown-add"
+                        >
+                          + {isJa ? "追加" : "Aggiungi"}
                         </button>
-                      ) : null}
+                      )}
                     </div>
                   ))}
-
-                  {/* Link al DB */}
-                  <button
-                    onClick={() => { onClose(); navigate("/ingredienti"); }}
-                    style={{ marginTop: "0.5rem", background: "none", border: "1px dashed var(--border-strong)", borderRadius: "var(--radius-md)", cursor: "pointer", color: "var(--text-muted)", padding: "0.5rem", fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", fontWeight: 600 }}>
-                    <IconDB /> {isJa ? "データベースを開く" : "Apri database ingredienti"}
-                  </button>
                 </div>
               )}
             </div>
           </>
         )}
 
-        <p style={{ margin: "1rem 0 0", fontSize: "0.65rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+        {/* ── Disclaimer ────────────────────────────────────────────────── */}
+        <p className="nutrition-disclaimer">
           {isJa
             ? "値は概算です。データのない食材は計算に含まれません。"
-            : "Valori calcolati in base agli ingredienti con dati disponibili. Gli ingredienti q.b. (eccetto olio = 10ml) sono esclusi."}
+            : "Valori calcolati in base ai dati disponibili. Ingredienti q.b. esclusi."}
         </p>
       </div>
     </div>
