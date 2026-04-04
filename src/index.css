@@ -339,7 +339,7 @@ input[type="range"]::-moz-range-thumb {
   background: var(--brand); border: none;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
+/* ══════════��═══════════════════════════════════════════════════════════════════
    CHECKBOX
 ══════════════════════════════════════════════════════════════════════════��═══ */
 .ingredient-checkbox {
@@ -917,38 +917,45 @@ input[type="range"]::-moz-range-thumb {
 /* Action bar */
 .recipe-actions {
   display: flex;
-  gap: 0.5rem;
+  justify-content: center;
+  gap: 0.6rem;
   margin-bottom: 1.5rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-  scrollbar-width: none;
+  flex-wrap: wrap;
 }
-.recipe-actions::-webkit-scrollbar { display: none; }
 .action-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border-strong);
+  gap: 0.35rem;
+  padding: 0.75rem 0.9rem;
+  border: none;
   border-radius: var(--radius-lg);
   cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 600;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  transition: all 0.15s;
-  min-width: 72px;
+  transition: all 0.18s ease;
+  min-width: 70px;
   flex-shrink: 0;
 }
 .action-btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--brand);
-  color: var(--brand);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
 }
 .action-btn:active { transform: scale(0.96); }
+
+/* Colored action button variants */
+.action-btn--teal    { background: linear-gradient(135deg, #2DB3A0 0%, #1E9485 100%); }
+.action-btn--orange  { background: linear-gradient(135deg, #F5A623 0%, #E8940F 100%); }
+.action-btn--purple  { background: linear-gradient(135deg, #8E7CC3 0%, #6A5A99 100%); }
+.action-btn--blue    { background: linear-gradient(135deg, #5DADE2 0%, #3498DB 100%); }
+
+.action-btn--teal:hover   { box-shadow: 0 6px 20px rgba(45,179,160,0.4); }
+.action-btn--orange:hover { box-shadow: 0 6px 20px rgba(245,166,35,0.4); }
+.action-btn--purple:hover { box-shadow: 0 6px 20px rgba(142,124,195,0.4); }
+.action-btn--blue:hover   { box-shadow: 0 6px 20px rgba(93,173,226,0.4); }
 
 /* Dropdown menu */
 .recipe-menu {

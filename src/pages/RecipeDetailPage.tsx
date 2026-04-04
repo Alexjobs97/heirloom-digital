@@ -182,9 +182,16 @@ function PremiumServingsSlider({ value, baseYield, onChange, min = 1, max = 12 }
 }
 
 // ── Bento Ingredient Card ────────────────────────────────────────────────────
+// 
+// HOW TO ADD INGREDIENT ICONS:
+// 1. Save PNG files to: public/images/ingredients/
+// 2. Name them using the canonicalId: e.g., "tomato.png", "olive_oil.png"
+// 3. Update INGREDIENTS_WITH_ICONS in src/lib/ingredientIcons.ts
+//
 function BentoIngredientCard({ ingredient, baseYield, targetYield }: {
   ingredient: Ingredient; baseYield: number; targetYield: number;
 }) {
+  const [imgError, setImgError] = useState(false);
   const scaled = scaleQty(ingredient.qty, baseYield, targetYield);
   let qtyDisplay = "";
   if (typeof scaled === "string") {
@@ -198,12 +205,26 @@ function BentoIngredientCard({ ingredient, baseYield, targetYield }: {
   const colorIdx = ingredient.displayName.charCodeAt(0) % colors.length;
   const bgColor = colors[colorIdx];
   
+  // Try to load a PNG icon from public/images/ingredients/{canonicalId}.png
+  const canonicalId = ingredient.canonicalId;
+  const iconPath = canonicalId ? `/images/ingredients/${canonicalId}.png` : null;
+  const showImage = iconPath && !imgError;
+  
   return (
     <div className="bento-ingredient">
-      <div className="bento-ingredient-icon" style={{ background: bgColor }}>
-        <span style={{ fontSize: "1.5rem", opacity: 0.6 }}>
-          {ingredient.displayName.charAt(0).toUpperCase()}
-        </span>
+      <div className="bento-ingredient-icon" style={{ background: showImage ? "transparent" : bgColor }}>
+        {showImage ? (
+          <img 
+            src={iconPath} 
+            alt={ingredient.displayName}
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "50%" }}
+          />
+        ) : (
+          <span style={{ fontSize: "1.5rem", opacity: 0.6 }}>
+            {ingredient.displayName.charAt(0).toUpperCase()}
+          </span>
+        )}
       </div>
       <div className="bento-ingredient-name">{ingredient.displayName}</div>
       {qtyDisplay && (
@@ -383,19 +404,19 @@ export default function RecipeDetailPage() {
 
         {/* Action bar */}
         <div className="recipe-actions">
-          <button className="action-btn" onClick={() => setShowAddList(true)}>
+          <button className="action-btn action-btn--teal" onClick={() => setShowAddList(true)}>
             <IconCart />
-            <span>{locale === "ja" ? "リストに追加" : "Lista"}</span>
+            <span>{locale === "ja" ? "リスト" : "Lista"}</span>
           </button>
-          <button className="action-btn" onClick={() => setShowNutrition(true)}>
+          <button className="action-btn action-btn--orange" onClick={() => setShowNutrition(true)}>
             <IconNutrition />
-            <span>{locale === "ja" ? "栄養成分" : "Nutrizione"}</span>
+            <span>{locale === "ja" ? "栄養" : "Nutrizione"}</span>
           </button>
-          <button className="action-btn" onClick={handleShare}>
+          <button className="action-btn action-btn--purple" onClick={handleShare}>
             <IconShare />
             <span>{locale === "ja" ? "共有" : "Condividi"}</span>
           </button>
-          <button className="action-btn" onClick={() => setShowMenu(v => !v)}>
+          <button className="action-btn action-btn--blue" onClick={() => setShowMenu(v => !v)}>
             <IconEdit />
             <span>{locale === "ja" ? "編集" : "Modifica"}</span>
           </button>
