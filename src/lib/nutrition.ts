@@ -4,7 +4,7 @@
  */
 
 import type { Ingredient, NutritionTotals } from "../types";
-import { resolveIngredient } from "./customIngredients";
+import { resolveIngredient, resolveByName } from "./customIngredients";
 
 // ── Status per ingrediente ────────────────────────────────────────────────────
 
@@ -26,7 +26,8 @@ export interface IngredientNutritionRow {
 // ── Calcolo grammi ────────────────────────────────────────────────────────────
 
 function toGrams(ing: Ingredient): { grams: number; status: IngredientStatus; message?: string } {
-  const entry = resolveIngredient(ing.canonicalId);
+  // Risolve: prima per canonicalId, poi per nome (fallback per id vuoti/errati)
+  const entry = resolveIngredient(ing.canonicalId) ?? resolveByName(ing.displayName);
 
   const raw = ing.qty;
 
@@ -60,8 +61,10 @@ function toGrams(ing: Ingredient): { grams: number; status: IngredientStatus; me
 
   // Nessuna unità → "N unità di X" — usa peso_medio_unità obbligatoriamente
   if (entry.peso_medio_unità && entry.peso_medio_unità > 0) {
+    // Arrotonda a 1 decimale per evitare floating point noise
+    const grams = Math.round(qty * entry.peso_medio_unità * 10) / 10;
     return {
-      grams: qty * entry.peso_medio_unità,
+      grams,
       status: "counted",
       message: `${qty} × ${entry.peso_medio_unità}g/unità`,
     };

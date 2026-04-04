@@ -99,6 +99,35 @@ export function searchIngredients(query: string): DictionaryEntry[] {
   return results.slice(0, 40);
 }
 
+/**
+ * Cerca un ingrediente per nome (IT/JP/EN) — usato come fallback quando
+ * il canonicalId è vuoto o non trovato.
+ */
+export function resolveByName(displayName: string): DictionaryEntry | null {
+  if (!displayName) return null;
+  const q = displayName.toLowerCase().trim();
+
+  // 1. Custom first
+  const custom = getCustomIngredients();
+  for (const entry of Object.values(custom)) {
+    for (const names of Object.values(entry.names)) {
+      if (names.some((n) => n.toLowerCase() === q || q.includes(n.toLowerCase()) || n.toLowerCase().includes(q))) {
+        return entry;
+      }
+    }
+  }
+
+  // 2. Built-in
+  for (const entry of Object.values(INGREDIENT_DICTIONARY)) {
+    for (const names of Object.values(entry.names)) {
+      if (names.some((n) => n.toLowerCase() === q || q.includes(n.toLowerCase()) || n.toLowerCase().includes(q))) {
+        return entry as DictionaryEntry;
+      }
+    }
+  }
+  return null;
+}
+
 /** Restituisce tutte le entries (custom override > built-in) */
 export function getAllIngredients(): DictionaryEntry[] {
   const custom = getCustomIngredients();
