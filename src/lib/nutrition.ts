@@ -1,6 +1,9 @@
 /**
- * nutrition.ts v2 — Calcolo nutrizionale con breakdown per-ingrediente.
- * Usa resolveIngredient() che controlla custom prima del dizionario built-in.
+ * nutrition.ts v5 — Calcolo nutrizionale con breakdown per-ingrediente.
+ *
+ * FIX CRITICO: toGrams ora restituisce anche l'entry trovata (con fallback
+ * su displayName), così il loop non fa una seconda lookup che mancherebbe
+ * del fallback, causando il bug "8 ✓ ma 13% e totali errati".
  */
 
 import type { Ingredient, NutritionTotals } from "../types";
@@ -13,68 +16,79 @@ export type IngredientStatus = "counted" | "not_found" | "skipped" | "no_unit";
 export interface IngredientNutritionRow {
   ingredient:    Ingredient;
   status:        IngredientStatus;
-  grams:         number;                // grammi conteggiati (0 se non conteggiato)
+  grams:         number;
   contribution?: {
     energia_kcal: number;
     proteine:     number;
     carboidrati:  number;
     grassi:       number;
   };
-  message?:      string;               // nota human-readable
+  message?:      string;
 }
 
-// ── Calcolo grammi ────────────────────────────────────────────────────────────
+// ── Import DictionaryEntry type ───────────────────────────────────────────────
 
-function toGrams(ing: Ingredient): { grams: number; status: IngredientStatus; message?: string } {
-  // Risolve: prima per canonicalId, poi per nome (fallback per id vuoti/errati)
-  const entry = resolveIngredient(ing.canonicalId) ?? resolveByName(ing.displayName);
+import type { DictionaryEntry } from "../types";
+
+// ── toGrams — restituisce anche l'entry per evitare doppie lookup ─────────────
+
+function toGrams(ing: Ingredient): {
+  grams:   number;
+  status:  IngredientStatus;
+  message?: string;
+  entry:   DictionaryEntry | null;   // ← l'entry trovata, usata dal loop principale
+} {
+  // Risolve: canonicalId prima, poi fallback per nome (gestisce canonicalId vuoti/errati)
+  const entry: DictionaryEntry | null =
+    resolveIngredient(ing.canonicalId) ?? resolveByName(ing.displayName);
 
   const raw = ing.qty;
 
-  // q.b. / a piacere
+  // ── q.b. / a piacere ───────────────────────────────────────────────────────
   if (typeof raw === "string") {
     const lower = raw.toLowerCase().trim();
     if (lower === "q.b." || lower === "qb" || lower === "a piacere" || lower === "" || lower === "—") {
-      // Olio: q.b. = 10ml
       const isOil =
         ing.canonicalId.includes("oil") ||
         ing.canonicalId.includes("olio") ||
         ing.displayName.toLowerCase().includes("olio") ||
         ing.displayName.toLowerCase().includes("oil");
-      if (isOil) return { grams: 10, status: entry?.nutrition ? "counted" : "not_found", message: "q.b. → 10 ml" };
-      return { grams: 0, status: "skipped", message: "q.b. escluso" };
+      if (isOil) {
+        return { grams: 10, status: entry?.nutrition ? "counted" : "not_found", message: "q.b. → 10 ml", entry };
+      }
+      return { grams: 0, status: "skipped", message: "q.b. escluso", entry };
     }
-    // Altro testo non numerico
-    return { grams: 0, status: "skipped", message: `Quantità testuale: "${raw}"` };
+    return { grams: 0, status: "skipped", message: `Quantità testuale: "${raw}"`, entry };
   }
 
   const qty = typeof raw === "number" ? raw : parseFloat(String(raw));
-  if (isNaN(qty) || qty <= 0) return { grams: 0, status: "skipped", message: "Quantità non valida" };
+  if (isNaN(qty) || qty <= 0) return { grams: 0, status: "skipped", message: "Quantità non valida", entry };
 
-  if (!entry) return { grams: 0, status: "not_found", message: "Ingrediente non trovato nel database" };
-  if (!entry.nutrition) return { grams: 0, status: "not_found", message: "Nessun dato nutrizionale nel database" };
+  if (!entry)           return { grams: 0, status: "not_found", message: "Ingrediente non trovato nel database", entry: null };
+  if (!entry.nutrition) return { grams: 0, status: "not_found", message: "Nessun dato nutrizionale nel database", entry };
 
-  // g o ml → diretto
+  // ── g o ml → diretto ────────────────────────────────────────────────────────
   if (ing.unit === "g" || ing.unit === "ml") {
-    return { grams: qty, status: "counted" };
+    return { grams: qty, status: "counted", entry };
   }
 
-  // Nessuna unità → "N unità di X" — usa peso_medio_unità obbligatoriamente
+  // ── Nessuna unità → N × peso_medio_unità ────────────────────────────────────
   if (entry.peso_medio_unità && entry.peso_medio_unità > 0) {
-    // Arrotonda a 1 decimale per evitare floating point noise
     const grams = Math.round(qty * entry.peso_medio_unità * 10) / 10;
     return {
       grams,
       status: "counted",
       message: `${qty} × ${entry.peso_medio_unità}g/unità`,
+      entry,
     };
   }
 
-  // Nessun peso unitario → non conteggiato (l'utente deve aggiungerlo nel DB)
+  // Nessun peso unitario → segnala come non conteggiato
   return {
     grams: 0,
     status: "no_unit",
-    message: `Aggiungi peso_medio_unità nel DB (${qty} unità × ? g)` ,
+    message: `Aggiungi peso_medio_unità nel DB (${qty} unità × ? g)`,
+    entry,
   };
 }
 
@@ -87,20 +101,20 @@ const EMPTY_TOTALS: NutritionTotals = {
 };
 
 export interface NutritionResult {
-  totals:  NutritionTotals;
-  rows:    IngredientNutritionRow[];
-  /** % di ingredienti trovati nel dizionario (esclude skipped) */
+  totals:          NutritionTotals;
+  rows:            IngredientNutritionRow[];
   coveragePercent: number;
 }
 
 export function calculateNutritionDetailed(ingredients: Ingredient[]): NutritionResult {
   const rows: IngredientNutritionRow[] = [];
   const totals: NutritionTotals = { ...EMPTY_TOTALS, extra: {} };
-  let countedN = 0;
+  let countedN     = 0;
   let totalRelevant = 0;
 
   for (const ing of ingredients) {
-    const { grams, status, message } = toGrams(ing);
+    // toGrams ora restituisce anche l'entry — NON ripetiamo la lookup
+    const { grams, status, message, entry } = toGrams(ing);
 
     if (status === "skipped") {
       rows.push({ ingredient: ing, status, grams: 0, message });
@@ -109,12 +123,13 @@ export function calculateNutritionDetailed(ingredients: Ingredient[]): Nutrition
 
     totalRelevant++;
 
-    const entry = resolveIngredient(ing.canonicalId);
+    // Se non conteggiato per qualsiasi motivo
     if (status !== "counted" || !entry?.nutrition || grams <= 0) {
       rows.push({ ingredient: ing, status, grams, message });
       continue;
     }
 
+    // Somma ai totali
     countedN++;
     const factor = grams / 100;
     const n      = entry.nutrition;
@@ -126,14 +141,14 @@ export function calculateNutritionDetailed(ingredients: Ingredient[]): Nutrition
       grassi:        round1((n.grassi           ?? 0) * factor),
     };
 
-    totals.energia_kcal    += contrib.energia_kcal;
-    totals.proteine         += contrib.proteine;
-    totals.carboidrati      += contrib.carboidrati;
-    totals.zuccheri         += round1((n.zuccheri      ?? 0) * factor);
-    totals.grassi           += contrib.grassi;
-    totals.grassi_saturi    += round1((n.grassi_saturi ?? 0) * factor);
-    totals.fibre            += round1((n.fibre          ?? 0) * factor);
-    totals.sale             += round2((n.sale           ?? 0) * factor);
+    totals.energia_kcal     += contrib.energia_kcal;
+    totals.proteine          += contrib.proteine;
+    totals.carboidrati       += contrib.carboidrati;
+    totals.zuccheri          += round1((n.zuccheri      ?? 0) * factor);
+    totals.grassi            += contrib.grassi;
+    totals.grassi_saturi     += round1((n.grassi_saturi ?? 0) * factor);
+    totals.fibre             += round1((n.fibre          ?? 0) * factor);
+    totals.sale              += round2((n.sale           ?? 0) * factor);
     totals.gramsAccountedFor += grams;
 
     if (n.extra) {
@@ -145,24 +160,20 @@ export function calculateNutritionDetailed(ingredients: Ingredient[]): Nutrition
     rows.push({ ingredient: ing, status, grams: round0(grams), contribution: contrib, message });
   }
 
-  // Arrotondamento finale totali
-  const finalTotals = roundTotals(totals);
-
   return {
-    totals: finalTotals,
+    totals:          roundTotals(totals),
     rows,
     coveragePercent: totalRelevant > 0 ? Math.round((countedN / totalRelevant) * 100) : 100,
   };
 }
 
-/** Shortcut — solo totali */
+/** Shortcut — solo totali (per compatibilità) */
 export function calculateNutrition(ingredients: Ingredient[]): NutritionTotals | null {
   const { totals, rows } = calculateNutritionDetailed(ingredients);
-  const hasSomething = rows.some((r) => r.status === "counted");
-  return hasSomething ? totals : null;
+  return rows.some((r) => r.status === "counted") ? totals : null;
 }
 
-// ── Helpers arrotondamento ────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function round0(v: number) { return Math.round(v); }
 function round1(v: number) { return Math.round(v * 10) / 10; }
@@ -182,8 +193,6 @@ function roundTotals(t: NutritionTotals): NutritionTotals {
     gramsAccountedFor:  Math.round(t.gramsAccountedFor),
   };
 }
-
-// ── Label helpers ─────────────────────────────────────────────────────────────
 
 export function formatExtraKey(key: string): { label: string; unit: string } {
   const parts = key.split("_");
