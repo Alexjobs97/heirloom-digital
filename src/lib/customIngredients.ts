@@ -103,35 +103,78 @@ export function searchIngredients(query: string): DictionaryEntry[] {
  * Cerca un ingrediente per nome (IT/JP/EN) — usato come fallback quando
  * il canonicalId è vuoto o non trovato.
  */
+/**
+ * Cerca un ingrediente per displayName con matching a 3 livelli progressivi.
+ *
+ * Livello 1 — Exact: nome DB = query intera (case-insensitive)
+ * Livello 2 — Prefix+modifier: query inizia con nome DB come parola intera,
+ *             e la parola successiva NON è una preposizione che indica variante
+ *             ("di", "al", "in", …). Questo permette "zenzero tritato" → zenzero,
+ *             ma blocca "latte di soia" → latte (latte è milk, non soy milk).
+ * Livello 3 — WordSubset: tutte le parole del nome DB (≥2 parole) sono
+ *             presenti nella query come parole intere.
+ *
+ * Cerca prima nei custom (priorità), poi nel built-in.
+ */
 export function resolveByName(displayName: string): DictionaryEntry | null {
   if (!displayName) return null;
-  const q = displayName.toLowerCase().trim();
+  const q  = displayName.toLowerCase().trim();
+  const qW = q.split(/\s+/);
 
-  const matches = (entry: DictionaryEntry): boolean => {
-    // 1. Prova il canonicalId direttamente (utile se names è vuoto)
-    if (entry.canonicalId.toLowerCase() === q) return true;
-    if (q.replace(/\s+/g, "_") === entry.canonicalId.toLowerCase()) return true;
-    // 2. Prova tutti i nomi (IT/JP/EN)
-    for (const names of Object.values(entry.names)) {
-      if (names.some((n: string) => {
-        const nl = n.toLowerCase();
-        return nl === q || q === nl || nl.includes(q) || q.includes(nl);
-      })) return true;
+  // Preposizioni italiane/giapponesi che indicano "variante diversa del prodotto"
+  // Se la seconda parola della query è una di queste, un match solo sulla prima
+  // parola non è sufficiente (es. "latte di soia" ≠ "latte")
+  const VARIANT_PREP = new Set(["di","al","alla","alle","agli","con","in","a","da","d'","dell'","dello","della","dell","all'","dall'"]);
+
+  function exactMatch(e: DictionaryEntry): boolean {
+    if (e.canonicalId.toLowerCase() === q) return true;
+    if (q.replace(/\s+/g, "_") === e.canonicalId.toLowerCase()) return true;
+    for (const names of Object.values(e.names))
+      if ((names as string[]).some((n) => n.toLowerCase() === q)) return true;
+    return false;
+  }
+
+  function prefixModifierMatch(e: DictionaryEntry): boolean {
+    for (const names of Object.values(e.names)) {
+      for (const n of names as string[]) {
+        const nl  = n.toLowerCase();
+        const nW  = nl.split(/\s+/);
+        // Il nome del DB deve matchare l'inizio della query parola per parola
+        if (nW.length > qW.length) continue;
+        const prefixMatch = nW.every((w, i) => qW[i] === w);
+        if (!prefixMatch) continue;
+        if (nW.length === qW.length) return true;          // exact (già catturato sopra, ma ok)
+        // Parola successiva al nome: non deve essere una preposizione-variante
+        const nextWord = qW[nW.length];
+        if (!VARIANT_PREP.has(nextWord)) return true;
+      }
     }
     return false;
-  };
-
-  // Custom first (hanno priorità)
-  const custom = getCustomIngredients();
-  for (const entry of Object.values(custom)) {
-    if (matches(entry)) return entry;
   }
 
-  // Built-in
-  for (const entry of Object.values(INGREDIENT_DICTIONARY)) {
-    if (matches(entry as DictionaryEntry)) return entry as DictionaryEntry;
+  function wordSubsetMatch(e: DictionaryEntry): boolean {
+    for (const names of Object.values(e.names)) {
+      for (const n of names as string[]) {
+        const nl = n.toLowerCase();
+        const nW = nl.split(/\s+/);
+        // Solo nomi composti (≥2 parole) o parole singole molto specifiche (≥6 char)
+        if (nW.length >= 2 && nW.every((w) => qW.includes(w))) return true;
+        if (nW.length === 1 && nl.length >= 6 && qW.includes(nl)) return true;
+      }
+    }
+    return false;
   }
-  return null;
+
+  function searchIn(entries: DictionaryEntry[]): DictionaryEntry | null {
+    for (const e of entries) { if (exactMatch(e)) return e; }
+    for (const e of entries) { if (prefixModifierMatch(e)) return e; }
+    for (const e of entries) { if (wordSubsetMatch(e)) return e; }
+    return null;
+  }
+
+  const custom  = Object.values(getCustomIngredients());
+  const builtin = Object.values(INGREDIENT_DICTIONARY) as DictionaryEntry[];
+  return searchIn(custom) ?? searchIn(builtin);
 }
 
 /** Restituisce tutte le entries (custom override > built-in) */
