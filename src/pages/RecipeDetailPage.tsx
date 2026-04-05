@@ -182,12 +182,9 @@ function PremiumServingsSlider({ value, baseYield, onChange, min = 1, max = 12 }
 }
 
 // ── Bento Ingredient Card ────────────────────────────────────────────────────
-// 
-// HOW TO ADD INGREDIENT ICONS:
-// 1. Save PNG files to: public/images/ingredients/
-// 2. Name them using the canonicalId: e.g., "tomato.png", "olive_oil.png"
-// 3. Update INGREDIENTS_WITH_ICONS in src/lib/ingredientIcons.ts
-//
+// Uses Spoonacular CDN for ingredient images - no local storage needed!
+import { getIngredientImageUrl, getIngredientFallbackStyle } from "../lib/ingredientIcons";
+
 function BentoIngredientCard({ ingredient, baseYield, targetYield }: {
   ingredient: Ingredient; baseYield: number; targetYield: number;
 }) {
@@ -200,28 +197,30 @@ function BentoIngredientCard({ ingredient, baseYield, targetYield }: {
     qtyDisplay = toDisplayQty(scaled);
   }
   
-  // Generate a consistent color based on ingredient name
-  const colors = ["#E8D5C4", "#D4E5D4", "#D4D8E5", "#E5D4D8", "#E5E4D4", "#D4E5E5"];
-  const colorIdx = ingredient.displayName.charCodeAt(0) % colors.length;
-  const bgColor = colors[colorIdx];
-  
-  // Try to load a PNG icon from public/images/ingredients/{canonicalId}.png
-  const canonicalId = ingredient.canonicalId;
-  const iconPath = canonicalId ? `/images/ingredients/${canonicalId}.png` : null;
-  const showImage = iconPath && !imgError;
+  // Get image URL from Spoonacular CDN (free, no API key needed for images)
+  const imageUrl = getIngredientImageUrl(ingredient.displayName, ingredient.canonicalId);
+  const fallback = getIngredientFallbackStyle(ingredient.displayName);
+  const showImage = imageUrl && !imgError;
   
   return (
     <div className="bento-ingredient">
-      <div className="bento-ingredient-icon" style={{ background: showImage ? "transparent" : bgColor }}>
+      <div 
+        className="bento-ingredient-icon" 
+        style={{ 
+          background: showImage ? "#fff" : fallback.bg,
+          border: showImage ? "2px solid #f0f0f0" : "none",
+        }}
+      >
         {showImage ? (
           <img 
-            src={iconPath} 
+            src={imageUrl} 
             alt={ingredient.displayName}
             onError={() => setImgError(true)}
-            style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "50%" }}
+            loading="lazy"
+            style={{ width: "80%", height: "80%", objectFit: "contain" }}
           />
         ) : (
-          <span style={{ fontSize: "1.5rem", opacity: 0.6 }}>
+          <span style={{ fontSize: "1.25rem", fontWeight: 700, color: fallback.text }}>
             {ingredient.displayName.charAt(0).toUpperCase()}
           </span>
         )}
