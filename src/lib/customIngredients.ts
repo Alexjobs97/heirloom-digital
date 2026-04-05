@@ -107,23 +107,29 @@ export function resolveByName(displayName: string): DictionaryEntry | null {
   if (!displayName) return null;
   const q = displayName.toLowerCase().trim();
 
-  // 1. Custom first
+  const matches = (entry: DictionaryEntry): boolean => {
+    // 1. Prova il canonicalId direttamente (utile se names è vuoto)
+    if (entry.canonicalId.toLowerCase() === q) return true;
+    if (q.replace(/\s+/g, "_") === entry.canonicalId.toLowerCase()) return true;
+    // 2. Prova tutti i nomi (IT/JP/EN)
+    for (const names of Object.values(entry.names)) {
+      if (names.some((n: string) => {
+        const nl = n.toLowerCase();
+        return nl === q || q === nl || nl.includes(q) || q.includes(nl);
+      })) return true;
+    }
+    return false;
+  };
+
+  // Custom first (hanno priorità)
   const custom = getCustomIngredients();
   for (const entry of Object.values(custom)) {
-    for (const names of Object.values(entry.names)) {
-      if (names.some((n) => n.toLowerCase() === q || q.includes(n.toLowerCase()) || n.toLowerCase().includes(q))) {
-        return entry;
-      }
-    }
+    if (matches(entry)) return entry;
   }
 
-  // 2. Built-in
+  // Built-in
   for (const entry of Object.values(INGREDIENT_DICTIONARY)) {
-    for (const names of Object.values(entry.names)) {
-      if (names.some((n) => n.toLowerCase() === q || q.includes(n.toLowerCase()) || n.toLowerCase().includes(q))) {
-        return entry as DictionaryEntry;
-      }
-    }
+    if (matches(entry as DictionaryEntry)) return entry as DictionaryEntry;
   }
   return null;
 }
