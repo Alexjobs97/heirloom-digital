@@ -218,6 +218,47 @@ header {
 @media (min-width: 820px)  { .recipe-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; } }
 @media (min-width: 1100px) { .recipe-grid { grid-template-columns: repeat(5, 1fr); gap: 16px; } }
 
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RECIPE CARD — CSS hover (GPU-accelerated, nessun JS handler)
+══════════════════════════════════════════════════════════════════════════════ */
+.recipe-card {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  aspect-ratio: 3/4;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  background: #111;
+  /* GPU layer per animazioni fluide */
+  will-change: transform;
+  transform: translateZ(0);
+  transition: transform 0.22s cubic-bezier(.22,.68,0,1.2),
+              box-shadow 0.22s ease;
+}
+.recipe-card:hover {
+  transform: translateY(-4px) scale(1.02) translateZ(0);
+  box-shadow: var(--shadow-hover);
+}
+.recipe-card:active {
+  transform: translateY(-1px) scale(1.005) translateZ(0);
+}
+
+.recipe-card-star {
+  border-radius: 50%;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.recipe-card-star:hover {
+  transform: scale(1.18);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    BOTTONI
 ══════════════════════════════════════════════════════════════════════════════ */

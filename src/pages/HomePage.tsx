@@ -40,17 +40,10 @@ function SkeletonGrid() {
   return (
     <div className="recipe-grid">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} style={{
-          borderRadius: "var(--radius-lg)", overflow: "hidden",
-          height: 88, display: "flex", gap: 0,
-          background: "var(--bg-card)", border: "1px solid var(--border)",
-        }}>
-          <div className="skeleton" style={{ width: 88, flexShrink: 0 }} />
-          <div style={{ flex: 1, padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <div className="skeleton" style={{ height: 16, width: "70%" }} />
-            <div className="skeleton" style={{ height: 12, width: "45%" }} />
-          </div>
-        </div>
+        <div key={i} className="skeleton" style={{
+          borderRadius: "var(--radius-lg)",
+          aspectRatio: "3/4",
+        }} />
       ))}
     </div>
   );

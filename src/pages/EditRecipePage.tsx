@@ -9,6 +9,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import type { Ingredient, Recipe } from "../types";
 import { useRecipe, useRecipes } from "../hooks/useRecipes";
 import { generateId } from "../lib/scaling";
+import { compressImage } from "../lib/imageUtils";
 import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
@@ -24,13 +25,19 @@ function IconImage() { return <svg viewBox="0 0 24 24" fill="none" stroke="curre
 function ImageUpload({ current, onChange }: { current?: string; onChange: (url: string | undefined) => void }) {
   const { t } = useTranslation();
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () => onChange(reader.result as string);
-    reader.readAsDataURL(file);
     e.target.value = "";
+    try {
+      const compressed = await compressImage(file);
+      onChange(compressed);
+    } catch {
+      // Fallback: FileReader senza compressione
+      const reader = new FileReader();
+      reader.onload = () => onChange(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
