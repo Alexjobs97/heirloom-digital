@@ -55,6 +55,8 @@ function recipeMatchesTerm(r: Recipe, term: string): boolean {
 
 export function useRecipes(filters?: SearchFilters) {
   const [recipes, setRecipes] = useState<Recipe[]>(_cache ?? []);
+  // Nota: usiamo il riferimento diretto a _cache, non una copia.
+  // React.memo su RecipeCard garantisce che solo le card effettivamente cambiate ri-renderizzino.
   const [loading, setLoading] = useState(_cache === null);
   const [error,   setError]   = useState<string | null>(null);
 
@@ -66,7 +68,8 @@ export function useRecipes(filters?: SearchFilters) {
   }, []);
 
   useEffect(() => {
-    const update = () => setRecipes([...(_cache ?? [])]);
+    // Usa il riferimento diretto alla cache (non copia) — React.memo evita re-render inutili
+    const update = () => setRecipes(_cache ?? []);
     _listeners.add(update);
     return () => { _listeners.delete(update); };
   }, []);

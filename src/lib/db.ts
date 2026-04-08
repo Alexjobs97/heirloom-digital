@@ -62,14 +62,19 @@ export async function getAllRecipes(): Promise<Recipe[]> {
 }
 
 /**
- * Carica tutte le ricette SENZA il campo coverImage.
- * Usato dalla griglia home: risparmia ~80% di memoria e velocizza
- * il caricamento iniziale con 20+ ricette.
+ * Carica tutte le ricette SENZA il campo coverImage (risparmia ~80% di memoria).
+ * Aggiunge `hasCoverImage: boolean` nei tag per permettere lazy loading.
+ * La RecipeCard usa useCoverImage() per caricare l'immagine on-demand.
  */
 export async function getAllRecipesLight(): Promise<Recipe[]> {
-  const db      = await openDB();
-  const all     = await wrap<Recipe[]>(tx(db, STORES.RECIPES).getAll());
-  return all.map(({ coverImage: _omit, ...rest }) => rest as Recipe);
+  const db  = await openDB();
+  const all = await wrap<Recipe[]>(tx(db, STORES.RECIPES).getAll());
+  return all.map(({ coverImage, ...rest }) => ({
+    ...rest,
+    coverImage: undefined,
+    // Segnale al RecipeCard: esiste un'immagine da caricare lazily
+    _hasCoverImage: !!coverImage,
+  } as Recipe));
 }
 
 export async function getRecipeById(id: string): Promise<Recipe | undefined> {

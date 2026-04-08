@@ -215,10 +215,7 @@ header {
   /* Paint skipping per card fuori viewport — grande win su mobile */
   /* (contain-intrinsic-size corrisponde all'aspect-ratio 3/4 a ~170px di larghezza) */
 }
-.recipe-grid > * {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 226px; /* altezza stimata card (3/4 × ~170px) */
-}
+
 @media (min-width: 480px)  { .recipe-grid { gap: 12px; } }
 @media (min-width: 600px)  { .recipe-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 820px)  { .recipe-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; } }
@@ -239,6 +236,8 @@ header {
   display: flex;
   flex-direction: column;
   background: #111;
+  /* Isola il reflow/repaint della card dal resto della pagina */
+  contain: layout style;
   transition: transform 0.22s cubic-bezier(.22,.68,0,1.2),
               box-shadow 0.22s ease;
 }

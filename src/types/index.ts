@@ -98,6 +98,10 @@ export interface Recipe {
   notes?: string;
   personalNote?: string; // note private dell'utente
   ja?: RecipeLocale;
+
+  /** Flag interno: usato dalla griglia per lazy-load immagini senza tenerle in cache.
+   *  Presente solo nelle ricette restituite da getAllRecipesLight(). */
+  _hasCoverImage?: boolean;
 }
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
