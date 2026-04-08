@@ -164,13 +164,92 @@ export interface SearchFilters {
   recentOnly?: boolean;
 }
 
+// ── Query parser con operatori logici ─────────────────────────────────────────
+
+export interface ParsedQuery {
+  /** Termini che devono TUTTI essere presenti (AND/virgola) */
+  must: string[];
+  /** Termini di cui almeno uno deve essere presente (OR/+) */
+  should: string[][];   // array di gruppi OR — ogni gruppo è [a, b] dove a OR b
+  /** Termini che devono essere ASSENTI (NOT/-) */
+  mustNot: string[];
+  /** True se c'è qualche operatore/virgola */
+  hasOperators: boolean;
+}
+
+/**
+ * Parsa la query di ricerca con supporto operatori:
+ *  - ","  o "、" → AND (tutti gli ingredienti devono essere presenti)
+ *  - "-"  o "not" (spazio-delimitato) → NOT (ingrediente deve essere assente)
+ *  - "+"  o "or"  (spazio-delimitato) → OR (almeno uno del gruppo)
+ *
+ * Esempi:
+ *   "uova, riso - spinaci - funghi"
+ *     → must:[uova, riso], mustNot:[spinaci, funghi]
+ *
+ *   "pasta, sugo or pesto, cipolla"
+ *     → must:[pasta, cipolla], should:[[sugo, pesto]]
+ *
+ *   "pollo + tacchino"
+ *     → should:[[pollo, tacchino]]
+ */
+export function parseSearchQuery(raw: string): ParsedQuery {
+  if (!raw.trim()) return { must: [], should: [], mustNot: [], hasOperators: false };
+
+  // Normalizza: "not X" → "- X", "X or Y" → "X + Y"
+  let q = raw
+    .replace(/not\s+/gi, "- ")
+    .replace(/\s+or\s+/gi, " + ");
+
+  // Splitta per virgola/punto-virgola/virgola giapponese
+  const segments = q.split(/[,、;]+/).map((s) => s.trim()).filter(Boolean);
+
+  const must:    string[]   = [];
+  const should:  string[][] = [];
+  const mustNot: string[]   = [];
+
+  for (const seg of segments) {
+    // Controlla se il segmento inizia con "-" (NOT)
+    if (/^[-–]/.test(seg)) {
+      const term = seg.replace(/^[-–]\s*/, "").trim();
+      if (term) mustNot.push(term);
+      continue;
+    }
+
+    // Controlla se contiene "+" (OR group)
+    if (seg.includes("+")) {
+      const parts = seg.split("+").map((p) => {
+        // Ogni parte può iniziare con "-" (NOT nel gruppo OR — raro ma gestiamo)
+        const t = p.trim().replace(/^[-–]\s*/, "");
+        return t;
+      }).filter(Boolean);
+
+      if (parts.length >= 2) {
+        should.push(parts);
+      } else if (parts.length === 1) {
+        must.push(parts[0]);
+      }
+      continue;
+    }
+
+    // Termine semplice: AND
+    const term = seg.replace(/^[-–]\s*/, "").trim();
+    if (term) must.push(term);
+  }
+
+  const hasOperators = mustNot.length > 0 || should.length > 0 || must.length > 1;
+  return { must, should, mustNot, hasOperators };
+}
+
+/** Legacy helper (backward compat) */
 export function parseIngredientTerms(query: string): string[] {
-  if (!query) return [];
-  return query.split(/[,、;]+/).map((s) => s.trim()).filter((s) => s.length > 0);
+  const { must } = parseSearchQuery(query);
+  return must;
 }
 
 export function isMultiIngredientQuery(query: string): boolean {
-  return /[,、;]/.test(query);
+  const { hasOperators, must } = parseSearchQuery(query);
+  return hasOperators || must.length > 1;
 }
 
 // ─── Cloud Sync ───────────────────────────────────────────────────────────────

@@ -212,6 +212,12 @@ header {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
+  /* Paint skipping per card fuori viewport — grande win su mobile */
+  /* (contain-intrinsic-size corrisponde all'aspect-ratio 3/4 a ~170px di larghezza) */
+}
+.recipe-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 226px; /* altezza stimata card (3/4 × ~170px) */
 }
 @media (min-width: 480px)  { .recipe-grid { gap: 12px; } }
 @media (min-width: 600px)  { .recipe-grid { grid-template-columns: repeat(3, 1fr); } }
@@ -233,15 +239,13 @@ header {
   display: flex;
   flex-direction: column;
   background: #111;
-  /* GPU layer per animazioni fluide */
-  will-change: transform;
-  transform: translateZ(0);
   transition: transform 0.22s cubic-bezier(.22,.68,0,1.2),
               box-shadow 0.22s ease;
 }
 .recipe-card:hover {
-  transform: translateY(-4px) scale(1.02) translateZ(0);
+  transform: translateY(-4px) scale(1.02);
   box-shadow: var(--shadow-hover);
+  will-change: transform; /* promuovi GPU solo durante hover */
 }
 .recipe-card:active {
   transform: translateY(-1px) scale(1.005) translateZ(0);

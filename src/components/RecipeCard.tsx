@@ -18,25 +18,63 @@ function IconHeart({ filled }: { filled?: boolean }) {
   return <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>;
 }
 
-const PALETTES = [
-  ["#1a1a1a","#2d1f14"], ["#14201a","#1f3028"], ["#1e1420","#2e1a2e"],
-  ["#201814","#302018"], ["#141e20","#1a2e32"], ["#1e2014","#2a2e1a"],
+/**
+ * Palette di colori eleganti matte/satin per le card senza foto.
+ * Toni ispirati a spezie, erbe, legno, ceramica — saturi ma non aggressivi.
+ * Ogni colore è [base, ombra] per un gradiente morbido.
+ */
+const PALETTES: Array<[string, string, string]> = [
+  // Terracotta
+  ["#B85C38", "#7A3520", "rgba(255,235,220,0.55)"],
+  // Salvia verde
+  ["#4A7C59", "#2C4A35", "rgba(220,245,230,0.50)"],
+  // Curcuma
+  ["#C4912A", "#7A5A10", "rgba(255,245,210,0.55)"],
+  // Malva viola
+  ["#7B5EA7", "#4A2E72", "rgba(240,225,255,0.50)"],
+  // Teal profondo
+  ["#2E7D8A", "#1A4A52", "rgba(210,245,248,0.50)"],
+  // Cipria rosso-matto
+  ["#A0455A", "#6A2035", "rgba(255,220,230,0.50)"],
+  // Oliva scuro
+  ["#6B7A2A", "#3D4510", "rgba(235,245,200,0.50)"],
+  // Ardesia blu
+  ["#3D5A7A", "#1E3248", "rgba(210,230,255,0.50)"],
+  // Cannella
+  ["#9A6235", "#5A3510", "rgba(255,235,210,0.55)"],
+  // Menta bosco
+  ["#3A7A6A", "#1E4840", "rgba(210,248,240,0.50)"],
 ];
 
 function Placeholder({ title }: { title: string }) {
-  const idx = (title.trim()[0]?.toUpperCase() ?? "R").charCodeAt(0);
-  const [a, b] = PALETTES[idx % PALETTES.length];
+  const code = [...(title.trim().toUpperCase())].reduce((a, c) => a + c.charCodeAt(0), 0);
+  const [base, shadow, textColor] = PALETTES[code % PALETTES.length];
+  const initial = title.trim()[0]?.toUpperCase() ?? "R";
+
   return (
     <div style={{
       position: "absolute", inset: 0,
-      background: `linear-gradient(160deg, ${a}, ${b})`,
+      // Gradiente matte: colore base + ombra + luce diffusa in alto
+      background: [
+        `radial-gradient(ellipse at 30% 25%, ${base}CC 0%, transparent 65%)`,
+        `radial-gradient(ellipse at 80% 80%, ${shadow}FF 0%, transparent 60%)`,
+        `linear-gradient(155deg, ${base}EE 0%, ${shadow}FF 100%)`,
+      ].join(", "),
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
+      {/* Texture noise simulata con pattern SVG */}
+      <div style={{
+        position: "absolute", inset: 0, opacity: 0.06,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+        backgroundSize: "180px",
+      }} />
       <span style={{
-        fontFamily: "var(--font-serif)", fontSize: "3rem", fontWeight: 700,
-        color: "rgba(255,255,255,0.10)",
+        fontFamily: "var(--font-serif)", fontSize: "clamp(2.5rem, 8vw, 3.5rem)",
+        fontWeight: 700, color: textColor,
+        letterSpacing: "-0.02em", lineHeight: 1,
+        textShadow: `0 2px 12px ${shadow}88`,
       }}>
-        {title.trim()[0]?.toUpperCase() ?? "R"}
+        {initial}
       </span>
     </div>
   );

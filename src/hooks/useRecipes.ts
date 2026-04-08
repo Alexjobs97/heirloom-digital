@@ -4,9 +4,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Recipe, SearchFilters } from "../types";
-import { parseIngredientTerms, isMultiIngredientQuery } from "../types";
+import { parseSearchQuery } from "../types";
 import {
   getAllRecipes,
+  getAllRecipesLight,
   getRecipeById,
   upsertRecipe,
   deleteRecipe as dbDelete,
@@ -24,7 +25,9 @@ const _listeners = new Set<() => void>();
 function notifyAll() { _listeners.forEach((fn) => fn()); }
 
 async function refreshCache(): Promise<Recipe[]> {
-  _cache = await getAllRecipes();
+  // Light: senza coverImage — risparmia ~80% di memoria per la griglia.
+  // Il dettaglio ricetta carica l'immagine on-demand via getRecipeById().
+  _cache = await getAllRecipesLight();
   notifyAll();
   return _cache;
 }
@@ -47,23 +50,6 @@ function recipeMatchesTerm(r: Recipe, term: string): boolean {
   return false;
 }
 
-function recipeHasAllIngredients(r: Recipe, terms: string[]): boolean {
-  return terms.every((term) => {
-    const q = term.toLowerCase();
-    if (r.ingredients.some((ing) =>
-      ing.displayName.toLowerCase().includes(q) ||
-      ing.canonicalId.toLowerCase().includes(q)
-    )) return true;
-    if (r.ja?.ingredients?.some((ing) =>
-      ing.displayName.toLowerCase().includes(q) ||
-      ing.canonicalId.toLowerCase().includes(q)
-    )) return true;
-    if (r.title.toLowerCase().includes(q)) return true;
-    if (r.ja?.title?.toLowerCase().includes(q)) return true;
-    if (r.tags.some((t) => t.toLowerCase().includes(q))) return true;
-    return false;
-  });
-}
 
 // ── Hook principale ───────────────────────────────────────────────────────────
 
@@ -95,9 +81,14 @@ export function useRecipes(filters?: SearchFilters) {
     if (maxTime)      list = list.filter((r) => r.totalTime > 0 && r.totalTime <= maxTime);
     if (tags?.length) list = list.filter((r) => tags.every((t) => r.tags.includes(t)));
     if (query?.trim()) {
-      if (isMultiIngredientQuery(query)) {
-        const terms = parseIngredientTerms(query);
-        if (terms.length > 0) list = list.filter((r) => recipeHasAllIngredients(r, terms));
+      const parsed = parseSearchQuery(query);
+      if (parsed.hasOperators || parsed.must.length > 1 || parsed.mustNot.length > 0 || parsed.should.length > 0) {
+        if (parsed.must.length > 0)
+          list = list.filter((r) => parsed.must.every((t) => recipeMatchesTerm(r, t)));
+        if (parsed.mustNot.length > 0)
+          list = list.filter((r) => !parsed.mustNot.some((t) => recipeMatchesTerm(r, t)));
+        if (parsed.should.length > 0)
+          list = list.filter((r) => parsed.should.every((grp) => grp.some((t) => recipeMatchesTerm(r, t))));
       } else {
         list = list.filter((r) => recipeMatchesTerm(r, query.trim()));
       }
@@ -170,7 +161,8 @@ export function useRecipes(filters?: SearchFilters) {
     remoteRecipes: Recipe[],
     remoteDeletedIds: string[] = []
   ): Promise<void> => {
-    const local = _cache ?? await getAllRecipes();
+    // Merge usa la lista completa (con immagini) per non perdere coverImage
+    const local = await getAllRecipes();
     const localById = new Map(local.map((r) => [r.id, r]));
 
     // Unione tombstones: locale + remoti

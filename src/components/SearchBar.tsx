@@ -6,7 +6,7 @@
 
 import { useRef, useCallback } from "react";
 import type { SearchFilters } from "../types";
-import { parseIngredientTerms, isMultiIngredientQuery } from "../types";
+import { parseSearchQuery } from "../types";
 import { useTranslation } from "../i18n/useTranslation";
 
 function IconSearch() {
@@ -54,14 +54,9 @@ export default function SearchBar({ filters, onChange, allTags, totalCount }: Se
     inputRef.current?.focus();
   }, [onChange]);
 
-  // ── Analisi query ─────────────────────────────────────────────────────────
-  const isMulti  = isMultiIngredientQuery(filters.query ?? "");
-  const terms    = isMulti ? parseIngredientTerms(filters.query ?? "") : [];
-  // Rimuove un termine specifico dalla query
-  const removeTerm = useCallback((term: string) => {
-    const remaining = terms.filter((t) => t !== term);
-    onChange({ query: remaining.join(", ") });
-  }, [terms, onChange]);
+  // ── Analisi query con operatori ───────────────────────────────────────────
+  const parsed = parseSearchQuery(filters.query ?? "");
+  const hasOps = parsed.hasOperators || parsed.must.length > 1 || parsed.mustNot.length > 0 || parsed.should.length > 0;
 
   // ── Chip filtri rapidi ────────────────────────────────────────────────────
   const chips = [
@@ -142,54 +137,38 @@ export default function SearchBar({ filters, onChange, allTags, totalCount }: Se
           )}
         </div>
 
-        {/* Hint multi-ingrediente */}
+        {/* Hint operatori */}
         {!filters.query && (
-          <p style={{
-            margin: 0, fontSize: "0.75rem", color: "var(--text-muted)",
-            paddingLeft: "0.25rem",
-          }}>
+          <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--text-muted)", paddingLeft: "0.25rem", lineHeight: 1.55 }}>
             {locale === "ja"
-              ? "複数の食材で絞り込む例：うまご、牛乳、チーズ"
-              : "Più ingredienti in AND: es. uova, latte, formaggio"}
+              ? "例: たまご、牛乳 ー ほうれん草 (除外) ／ パスタ + リゾット (どちらか)"
+              : <><strong>AND</strong>: uova, riso &nbsp;·&nbsp; <strong>NOT</strong>: uova - spinaci &nbsp;·&nbsp; <strong>OR</strong>: pasta + riso, cipolla</>
+            }
           </p>
         )}
 
-        {/* ── Chips termini multi-ingrediente ───────────────────────────── */}
-        {isMulti && terms.length > 0 && (
+        {/* ── Preview operatori logici ──────────────────────────────────── */}
+        {hasOps && (
           <div style={{
-            display: "flex", flexWrap: "wrap", gap: "0.35rem",
-            padding: "0.5rem 0.625rem",
-            background: "var(--brand-light)",
-            borderRadius: "var(--radius-md)",
+            display: "flex", flexWrap: "wrap", gap: "0.3rem",
+            padding: "0.45rem 0.625rem",
+            background: "var(--brand-light)", borderRadius: "var(--radius-md)",
             alignItems: "center",
           }}>
-            <span style={{
-              display: "flex", alignItems: "center", gap: "0.25rem",
-              fontSize: "0.72rem", fontWeight: 700, color: "var(--brand-dark)",
-              letterSpacing: "0.04em", textTransform: "uppercase", marginRight: "0.15rem",
-            }}>
-              <IconIngredients />
-              {locale === "ja" ? "AND検索" : "AND"}
-            </span>
-            {terms.map((term, i) => (
-              <button
-                key={i}
-                onClick={() => removeTerm(term)}
-                title={`Rimuovi "${term}"`}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "0.3rem",
-                  padding: "0.2rem 0.55rem 0.2rem 0.65rem",
-                  background: "var(--brand)", color: "#fff",
-                  border: "none", borderRadius: "var(--radius-full)",
-                  fontSize: "0.78rem", fontWeight: 700, cursor: "pointer",
-                  transition: "opacity 0.15s",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.8"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-              >
-                {term}
-                <span style={{ opacity: 0.7, fontSize: "0.7rem", lineHeight: 1 }}>✕</span>
-              </button>
+            {parsed.must.map((t, i) => (
+              <span key={`must-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.18rem 0.55rem", background: "var(--brand)", color: "#fff", borderRadius: "var(--radius-full)", fontSize: "0.75rem", fontWeight: 700 }}>
+                ✓ {t}
+              </span>
+            ))}
+            {parsed.mustNot.map((t, i) => (
+              <span key={`not-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.18rem 0.55rem", background: "var(--error)", color: "#fff", borderRadius: "var(--radius-full)", fontSize: "0.75rem", fontWeight: 700 }}>
+                ✗ {t}
+              </span>
+            ))}
+            {parsed.should.map((group, i) => (
+              <span key={`or-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", padding: "0.18rem 0.55rem", background: "rgba(52,152,219,0.18)", color: "#2980b9", border: "1px solid rgba(52,152,219,0.35)", borderRadius: "var(--radius-full)", fontSize: "0.75rem", fontWeight: 700 }}>
+                ◎ {group.join(" or ")}
+              </span>
             ))}
           </div>
         )}
