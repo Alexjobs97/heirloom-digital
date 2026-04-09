@@ -11,7 +11,6 @@ import { useRecipe, useRecipes } from "../hooks/useRecipes";
 import { generateId } from "../lib/scaling";
 import { compressImage } from "../lib/imageUtils";
 import { getPlaceholderColor } from "../lib/placeholderColor";
-import { invalidateImage } from "../lib/imageCache";
 import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
