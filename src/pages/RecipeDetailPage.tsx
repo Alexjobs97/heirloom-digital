@@ -17,6 +17,7 @@ import ServingsSlider from "../components/ServingsSlider";
 import IngredientRow from "../components/IngredientRow";
 import { useTranslation } from "../i18n/useTranslation";
 import { useLang } from "../i18n/LangContext";
+import { getPlaceholderColor } from "../lib/placeholderColor";
 import NutritionModal from "./NutritionModal";
 
 // ── Icone ─────────────────────────────────────────────────────────────────────
@@ -35,15 +36,21 @@ function IconX()         { return <svg viewBox="0 0 24 24" fill="none" stroke="c
 function IconChevron()   { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>; }
 
 // ── Hero placeholder ───────────────────────────────────────────────────────────
-const PAL = [["#c47a4a","#7a3d1e"],["#8a7a5a","#453c29"],["#6a8a6c","#324035"],["#8a6a7a","#42303a"],["#7a8a5c","#3a422c"],["#5a7a8a","#2a3a42"]];
+
+const HERO_COLORS_DETAIL = [
+  "#F0A830","#35A3A2","#E8345A","#4092FF","#E8702A",
+  "#5BAD72","#C45AA8","#3AB8D0","#D4A020","#E85070",
+  "#2ECC71","#9B59B6","#E67E22","#1ABC9C","#E74C3C",
+];
 function HeroPlaceholder({ title }: { title: string }) {
-  const p = PAL[(title.trim()[0]?.toUpperCase() ?? "R").charCodeAt(0) % PAL.length];
+  const isDark = !document.documentElement.classList.contains("light");
+  const color  = getPlaceholderColor(title, isDark);
   return (
-    <div style={{ width: "100%", aspectRatio: "16/6", background: `linear-gradient(135deg,${p[0]},${p[1]})`, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-lg)" }}>
-      <span style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(3rem,8vw,5rem)", fontWeight: 700, color: "rgba(255,255,255,0.15)" }}>
-        {title.trim()[0]?.toUpperCase() ?? "R"}
-      </span>
-    </div>
+    <div style={{
+      width: "100%", aspectRatio: "16/6",
+      background: color,
+      borderRadius: "var(--radius-lg)",
+    }} />
   );
 }
 

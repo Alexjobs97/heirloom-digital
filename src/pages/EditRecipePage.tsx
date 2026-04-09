@@ -10,6 +10,8 @@ import type { Ingredient, Recipe } from "../types";
 import { useRecipe, useRecipes } from "../hooks/useRecipes";
 import { generateId } from "../lib/scaling";
 import { compressImage } from "../lib/imageUtils";
+import { getPlaceholderColor } from "../lib/placeholderColor";
+import { invalidateImage } from "../lib/imageCache";
 import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
@@ -22,7 +24,7 @@ function IconImage() { return <svg viewBox="0 0 24 24" fill="none" stroke="curre
 
 // ─── Image Upload ─────────────────────────────────────────────────────────────
 
-function ImageUpload({ current, onChange }: { current?: string; onChange: (url: string | undefined) => void }) {
+function ImageUpload({ current, onChange, title = "" }: { current?: string; onChange: (url: string | undefined) => void; title?: string }) {
   const { t } = useTranslation();
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,9 +57,9 @@ function ImageUpload({ current, onChange }: { current?: string; onChange: (url: 
         {current ? (
           <img src={current} alt="Anteprima" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
-          <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.4rem", color: "var(--text-muted)" }}>
+          <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", background: "var(--bg-surface, var(--bg-page))" }}>
             <IconImage />
-            <span style={{ fontSize: "0.8rem" }}>Clicca per aggiungere una foto</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Clicca per aggiungere una foto</span>
           </div>
         )}
         <input type="file" accept="image/*" onChange={handleFile}
@@ -159,6 +161,7 @@ export default function EditRecipePage() {
         // recipe.ja viene preservato dallo spread sopra — non viene sovrascritto
       };
       await updateRecipe(updated);
+      invalidateImage(recipe.id); // aggiorna lazy cache
       navigate(`/ricette/${recipe.id}`);
     } finally {
       setSaving(false);
@@ -207,7 +210,7 @@ export default function EditRecipePage() {
 
         {/* Foto */}
         <div className="card" style={{ padding: "1rem 1.25rem" }}>
-          <ImageUpload current={coverImg} onChange={setCoverImg} />
+          <ImageUpload current={coverImg} onChange={setCoverImg} title={title} />
         </div>
 
         {/* Info base */}

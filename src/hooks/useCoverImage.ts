@@ -1,85 +1,59 @@
 /**
- * useCoverImage.ts — Carica l'immagine di copertina on-demand via IntersectionObserver.
+ * useCoverImage.ts — Lazy loading immagini con cache invalidabile.
  *
- * Il cache principale (useRecipes) tiene le ricette SENZA coverImage per performance.
- * Quando una RecipeCard entra nel viewport, questo hook fetcha l'immagine
- * da IndexedDB e la mostra — zero impatto sullo scrolling.
+ * Cache globale cancellabile per recipeId: quando una ricetta viene
+ * salvata/modificata, clearImageCache(id) forza il reload.
  */
 
 import { useState, useEffect, useRef } from "react";
 import { getRecipeById } from "../lib/db";
 
-// Cache globale in-memory per le immagini già caricate (evita refetch)
 const _imgCache = new Map<string, string | null>();
 
-export function useCoverImage(recipeId: string, hasCoverImage: boolean): string | null {
-  const [src, setSrc]       = useState<string | null>(_imgCache.get(recipeId) ?? null);
-  const cardRef             = useRef<Element | null>(null);
-  const observerRef         = useRef<IntersectionObserver | null>(null);
-
-  useEffect(() => {
-    if (!hasCoverImage) return;
-    if (_imgCache.has(recipeId)) { setSrc(_imgCache.get(recipeId) ?? null); return; }
-
-    // IntersectionObserver: carica l'immagine solo quando la card è visibile
-    const load = async () => {
-      const recipe = await getRecipeById(recipeId).catch(() => null);
-      const image  = recipe?.coverImage ?? null;
-      _imgCache.set(recipeId, image);
-      setSrc(image);
-    };
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          load();
-          observerRef.current?.disconnect();
-        }
-      },
-      { rootMargin: "200px" }   // pre-carica 200px prima che entri nel viewport
-    );
-
-    // Osserva il primo elemento DOM disponibile (cardRef viene settato da RecipeCard)
-    if (cardRef.current) {
-      observerRef.current.observe(cardRef.current);
-    }
-
-    return () => observerRef.current?.disconnect();
-  }, [recipeId, hasCoverImage]);
-
-  return src;
+/** Chiamato da useRecipes dopo upsertRecipe — invalida la cache dell'immagine */
+export function clearImageCache(recipeId: string) {
+  _imgCache.delete(recipeId);
 }
 
-/**
- * Attacca il ref dell'elemento DOM all'observer del hook.
- * Usato da RecipeCard: `ref={attachRef(cardRef)}`.
- */
 export function useCardImageLoader(recipeId: string, hasCoverImage: boolean) {
-  const [src, setSrc] = useState<string | null>(_imgCache.get(recipeId) ?? null);
-  const domRef = useRef<HTMLElement | null>(null);
+  const [src, setSrc] = useState<string | null>(
+    hasCoverImage && _imgCache.has(recipeId) ? _imgCache.get(recipeId)! : null
+  );
+  const observedRef = useRef(false);
 
   const setRef = (el: HTMLElement | null) => {
-    if (!el || !hasCoverImage || _imgCache.has(recipeId)) return;
-    domRef.current = el;
+    if (!el || !hasCoverImage || observedRef.current) return;
+    observedRef.current = true;
+
+    // Se già in cache (valida), usa subito
+    if (_imgCache.has(recipeId)) {
+      setSrc(_imgCache.get(recipeId) ?? null);
+      return;
+    }
 
     const observer = new IntersectionObserver(
       async (entries) => {
         if (!entries[0]?.isIntersecting) return;
         observer.disconnect();
-        const recipe = await getRecipeById(recipeId).catch(() => null);
-        const image  = recipe?.coverImage ?? null;
-        _imgCache.set(recipeId, image);
-        setSrc(image);
+        try {
+          const recipe = await getRecipeById(recipeId);
+          const image  = recipe?.coverImage ?? null;
+          _imgCache.set(recipeId, image);
+          setSrc(image);
+        } catch { /* noop */ }
       },
-      { rootMargin: "250px" }
+      { rootMargin: "300px" }
     );
     observer.observe(el);
   };
 
-  // Se già in cache, non serve observer
+  // Re-check quando hasCoverImage cambia (es. immagine rimossa)
   useEffect(() => {
-    if (_imgCache.has(recipeId)) setSrc(_imgCache.get(recipeId) ?? null);
-  }, [recipeId]);
+    if (!hasCoverImage) {
+      _imgCache.delete(recipeId);
+      setSrc(null);
+    }
+  }, [hasCoverImage, recipeId]);
 
   return { src, setRef };
 }

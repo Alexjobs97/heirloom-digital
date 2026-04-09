@@ -12,6 +12,8 @@ import {
   upsertRecipe,
   deleteRecipe as dbDelete,
 } from "../lib/db";
+import { clearImageCache } from "./useCoverImage";
+import { invalidateImage, invalidateAllImages } from "../lib/imageCache";
 import { generateId } from "../lib/scaling";
 import {
   addLocalDeletedId,
@@ -115,13 +117,17 @@ export function useRecipes(filters?: SearchFilters) {
       const now = new Date().toISOString();
       const full = { ...data, id: data.id ?? generateId(), createdAt: data.createdAt ?? now, updatedAt: now } as Recipe;
       await upsertRecipe(full);
+      invalidateImage(full.id); // invalida cache immagine
       await refreshCache();
       return full;
     }, []
   );
 
   const updateRecipe = useCallback(async (recipe: Recipe): Promise<void> => {
-    await upsertRecipe({ ...recipe, updatedAt: new Date().toISOString() });
+    const _upd = { ...recipe, updatedAt: new Date().toISOString() };
+    await upsertRecipe(_upd);
+    invalidateImage(recipe.id);
+    invalidateAllImages(); // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
@@ -129,6 +135,8 @@ export function useRecipes(filters?: SearchFilters) {
     // Registra il tombstone PRIMA di cancellare dal DB
     addLocalDeletedId(id);
     await dbDelete(id);
+    invalidateImage(id);
+    invalidateAllImages(); // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
@@ -136,6 +144,7 @@ export function useRecipes(filters?: SearchFilters) {
     const r = await getRecipeById(id);
     if (!r) return;
     await upsertRecipe({ ...r, starred: !r.starred, updatedAt: new Date().toISOString() });
+    invalidateAllImages(); // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
@@ -143,6 +152,7 @@ export function useRecipes(filters?: SearchFilters) {
     const r = await getRecipeById(id);
     if (!r) return;
     await upsertRecipe({ ...r, lastCooked: new Date().toISOString() });
+    invalidateAllImages(); // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
@@ -196,6 +206,7 @@ export function useRecipes(filters?: SearchFilters) {
       }
     }
 
+    invalidateAllImages(); // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
