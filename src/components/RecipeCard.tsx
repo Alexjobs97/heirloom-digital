@@ -77,7 +77,7 @@ const RecipeCard = memo(function RecipeCard({
       {/* Overlay scuro solo in fondo per leggibilità testo — flat, no gradiente sopra */}
       <div style={{
         position: "absolute", inset: 0, pointerEvents: "none",
-        background: "linear-gradient(to bottom, transparent 45%, rgba(0,0,0,0.72) 100%)",
+        background: "linear-gradient(to bottom, transparent 45%, rgba(0,0,0,0.9) 100%)",
       }} />
 
       {/* Stella */}
