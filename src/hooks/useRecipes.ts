@@ -116,7 +116,8 @@ export function useRecipes(filters?: SearchFilters) {
       const now = new Date().toISOString();
       const full = { ...data, id: data.id ?? generateId(), createdAt: data.createdAt ?? now, updatedAt: now } as Recipe;
       await upsertRecipe(full);
-      // invalida cache immagine
+      // Invalida cache immagine per questo id (forza reload nella card)
+      clearImageCache(full.id);
       await refreshCache();
       return full;
     }, []
@@ -125,7 +126,8 @@ export function useRecipes(filters?: SearchFilters) {
   const updateRecipe = useCallback(async (recipe: Recipe): Promise<void> => {
     const _upd = { ...recipe, updatedAt: new Date().toISOString() };
     await upsertRecipe(_upd);
-    // dopo merge bulk, invalida tutto
+    // Invalida cache immagine per questo id (forza reload nella card)
+    clearImageCache(_upd.id);
     await refreshCache();
   }, []);
 
@@ -133,7 +135,8 @@ export function useRecipes(filters?: SearchFilters) {
     // Registra il tombstone PRIMA di cancellare dal DB
     addLocalDeletedId(id);
     await dbDelete(id);
-    // dopo merge bulk, invalida tutto
+    // Invalida cache immagine
+    clearImageCache(id);
     await refreshCache();
   }, []);
 
@@ -141,7 +144,6 @@ export function useRecipes(filters?: SearchFilters) {
     const r = await getRecipeById(id);
     if (!r) return;
     await upsertRecipe({ ...r, starred: !r.starred, updatedAt: new Date().toISOString() });
-    // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
@@ -149,7 +151,6 @@ export function useRecipes(filters?: SearchFilters) {
     const r = await getRecipeById(id);
     if (!r) return;
     await upsertRecipe({ ...r, lastCooked: new Date().toISOString() });
-    // dopo merge bulk, invalida tutto
     await refreshCache();
   }, []);
 
@@ -183,6 +184,7 @@ export function useRecipes(filters?: SearchFilters) {
     for (const deletedId of allDeleted) {
       if (localById.has(deletedId)) {
         await dbDelete(deletedId);
+        clearImageCache(deletedId);
         localById.delete(deletedId);
       }
     }
@@ -196,10 +198,14 @@ export function useRecipes(filters?: SearchFilters) {
       const loc = localById.get(remote.id);
       if (!loc) {
         await upsertRecipe(remote);
+        clearImageCache(remote.id);
       } else {
         const remoteTs = new Date(remote.updatedAt ?? remote.createdAt).getTime();
         const localTs  = new Date(loc.updatedAt  ?? loc.createdAt).getTime();
-        if (remoteTs > localTs) await upsertRecipe(remote);
+        if (remoteTs > localTs) {
+          await upsertRecipe(remote);
+          clearImageCache(remote.id);
+        }
       }
     }
 
@@ -230,14 +236,35 @@ export function useRecipe(id: string | undefined) {
 
   useEffect(() => {
     if (!id) { setLoading(false); return; }
+
+    // Mostra subito la versione light dalla cache (render veloce, senza immagine)
     const cached = _cache?.find((r) => r.id === id);
     if (cached) { setRecipe(cached); setLoading(false); }
-    else {
+
+    // Carica SEMPRE la versione completa dal DB (per avere coverImage)
+    getRecipeById(id)
+      .then((r) => {
+        if (r) {
+          setRecipe(r);
+          setLoading(false);
+        } else if (!cached) {
+          setError("Ricetta non trovata");
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cached) {
+          setError("Errore di accesso al database");
+          setLoading(false);
+        }
+      });
+
+    // Ascolta aggiornamenti della cache: ricarica dal DB per avere coverImage aggiornato
+    const update = () => {
       getRecipeById(id)
-        .then((r) => { setRecipe(r ?? null); if (!r) setError("Ricetta non trovata"); setLoading(false); })
-        .catch(() => { setError("Errore di accesso al database"); setLoading(false); });
-    }
-    const update = () => { const fresh = _cache?.find((r) => r.id === id); if (fresh) setRecipe(fresh); };
+        .then((r) => { if (r) setRecipe(r); })
+        .catch(() => {});
+    };
     _listeners.add(update);
     return () => { _listeners.delete(update); };
   }, [id]);
