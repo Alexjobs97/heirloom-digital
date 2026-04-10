@@ -1,73 +1,101 @@
 /**
- * EditRecipePage.tsx v2 — Modifica ricetta esistente.
- * FIX: preserva recipe.ja quando si salvano le modifiche (non lo cancella).
- * Usa useTranslation() per tutte le etichette.
+ * EditRecipePage.tsx v3 — Modifica ricetta esistente.
+ * FIX: URL immagine alternativo, tasto rimuovi immagine, navigazione post-salvataggio.
  */
-
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type { Ingredient, Recipe } from "../types";
 import { useRecipe, useRecipes } from "../hooks/useRecipes";
 import { generateId } from "../lib/scaling";
 import { compressImage } from "../lib/imageUtils";
-import { getPlaceholderColor } from "../lib/placeholderColor";
 import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
-
 function IconBack()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="18" height="18"><polyline points="15 18 9 12 15 6"/></svg>; }
 function IconSave()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>; }
 function IconPlus()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>; }
 function IconTrash() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>; }
 function IconImage() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>; }
 
-// ─── Image Upload ─────────────────────────────────────────────────────────────
-
-function ImageUpload({ current, onChange, title = "" }: { current?: string; onChange: (url: string | undefined) => void; title?: string }) {
+// ─── Image Upload (con supporto URL + Rimuovi) ────────────────────────────────
+function ImageUpload({ current, onChange }: { current?: string; onChange: (url: string | undefined) => void }) {
   const { t } = useTranslation();
+  const [urlInput, setUrlInput] = useState(current?.startsWith("http") ? current : "");
+
+  // Sincronizza input URL se il genitore cambia coverImg esternamente
+  useEffect(() => {
+    if (current?.startsWith("http")) {
+      setUrlInput(current);
+    } else if (!current) {
+      setUrlInput("");
+    }
+  }, [current]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
     e.target.value = "";
+    setUrlInput(""); // Pulisce campo URL se si carica un file
     try {
       const compressed = await compressImage(file);
       onChange(compressed);
     } catch {
-      // Fallback: FileReader senza compressione
       const reader = new FileReader();
       reader.onload = () => onChange(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
+  const handleUrlChange = (val: string) => {
+    setUrlInput(val);
+    if (val.trim()) onChange(val.trim());
+  };
+
+  const handleRemove = () => {
+    onChange(undefined);
+    setUrlInput("");
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <label>Foto della ricetta</label>
+      
+      {/* Campo URL */}
+      <input 
+        className="input" 
+        placeholder="Incolla URL immagine da internet…" 
+        value={urlInput}
+        onChange={(e) => handleUrlChange(e.target.value)}
+        style={{ flex: 1 }}
+      />
+      
+      {/* Preview */}
       <div style={{
         position: "relative", width: "100%", aspectRatio: "16/5",
         borderRadius: "var(--radius-md)", overflow: "hidden",
         border: "2px dashed var(--border)", background: "var(--bg-page)", cursor: "pointer",
         transition: "border-color 0.15s",
       }}
-        onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
-        onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
       >
         {current ? (
           <img src={current} alt="Anteprima" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
           <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", background: "var(--bg-surface, var(--bg-page))" }}>
             <IconImage />
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Clicca per aggiungere una foto</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Clicca per caricare o incolla URL</span>
           </div>
         )}
         <input type="file" accept="image/*" onChange={handleFile}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
       </div>
+      
+      {/* Tasto rimuovi */}
       {current && (
-        <button type="button" className="btn btn-ghost" onClick={() => onChange(undefined)}
-          style={{ fontSize: "0.8rem", color: "var(--error)", alignSelf: "flex-start" }}>
-          Rimuovi foto
+        <button type="button" className="btn btn-ghost" onClick={handleRemove}
+          style={{ fontSize: "0.8rem", color: "var(--error)", alignSelf: "flex-start", gap: "0.3rem" }}>
+          🗑️ {t("misc.remove") || "Rimuovi immagine"}
         </button>
       )}
     </div>
@@ -75,18 +103,15 @@ function ImageUpload({ current, onChange, title = "" }: { current?: string; onCh
 }
 
 // ─── Editable Ingredient ──────────────────────────────────────────────────────
-
 interface EditableIng {
   _id: string;
   qty: string;
   unit: "ml" | "g" | "";
   name: string;
 }
-
 function toEditable(ing: Ingredient): EditableIng {
   return { _id: ing.id ?? generateId(), qty: String(ing.qty), unit: ing.unit, name: ing.displayName };
 }
-
 function fromEditable(ing: EditableIng): Ingredient {
   const qtyNum = parseFloat(ing.qty.replace(",", "."));
   return {
@@ -99,7 +124,6 @@ function fromEditable(ing: EditableIng): Ingredient {
 }
 
 // ─── EditRecipePage ───────────────────────────────────────────────────────────
-
 export default function EditRecipePage() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -157,10 +181,9 @@ export default function EditRecipePage() {
         coverImage:  coverImg,
         steps:       steps.map((s) => s.trim()).filter(Boolean),
         ingredients: ingredients.filter((i) => i.name.trim()).map(fromEditable),
-        // recipe.ja viene preservato dallo spread sopra — non viene sovrascritto
       };
       await updateRecipe(updated);
-      invalidateImage(recipe.id); // aggiorna lazy cache
+      // ✅ Naviga alla pagina dettaglio ricetta dopo il salvataggio
       navigate(`/ricette/${recipe.id}`);
     } finally {
       setSaving(false);
@@ -181,7 +204,6 @@ export default function EditRecipePage() {
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "1.25rem 1rem 4rem" }}>
-
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <button className="btn btn-ghost" onClick={() => navigate(-1)} style={{ gap: "0.3rem", padding: "0.5rem 0.75rem" }}>
@@ -206,10 +228,9 @@ export default function EditRecipePage() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-
         {/* Foto */}
         <div className="card" style={{ padding: "1rem 1.25rem" }}>
-          <ImageUpload current={coverImg} onChange={setCoverImg} title={title} />
+          <ImageUpload current={coverImg} onChange={setCoverImg} />
         </div>
 
         {/* Info base */}
