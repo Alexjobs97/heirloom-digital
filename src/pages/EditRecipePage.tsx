@@ -136,21 +136,9 @@ function ImageUpload({ current, onChange }: { current?: string; onChange: (url: 
             e.currentTarget.style.borderColor = "transparent"; 
           }}
         >
-          🗑️ <span style={{ fontWeight: 600 }}>Rimuovi immagine</span> <span style={{ fontSize: "0.7rem", opacity: 0.7, fontStyle: "italic" }}>(puf!)</span>
+          🗑️ <span style={{ fontWeight: 600 }}>Rimuovi immagine</span> <span style={{ fontSize: "0.7rem", opacity: 0.7, fontStyle: "italic" }}></span>
         </button>
       )}
-
-      <style>{`
-        @keyframes poof {
-          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: blur(0); }
-          40% { transform: scale(1.08) rotate(2deg); opacity: 0.9; filter: blur(1px); }
-          100% { transform: scale(0.85) rotate(-3deg); opacity: 0; filter: blur(4px); }
-        }
-        .image-remove-anim { 
-          animation: poof 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important; 
-          transform-origin: center center;
-        }
-      `}</style>
     </div>
   );
 }
