@@ -1,9 +1,8 @@
 /**
- * AddRecipePage.tsx v4 — Incolla testo + ParseReview + salvataggio bilingue.
- * FIX CRITICO: i dati JP vengono salvati in recipe.ja (RecipeLocale),
- * non nei vecchi campi titleJa/stepsJa/ingredientsJa che non esistono nel tipo.
+ * AddRecipePage.tsx v5 — Incolla testo + ParseReview + salvataggio bilingue + Immagine.
+ * FEATURE: Supporto URL immagine (alternativo al file) nella fase di creazione.
+ * FIX CRITICO: i dati JP vengono salvati in recipe.ja (RecipeLocale).
  */
-
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ParsedResult, RawIngredient, Recipe, Ingredient } from "../types";
@@ -13,15 +12,14 @@ import { generateId } from "../lib/scaling";
 import { useTranslation } from "../i18n/useTranslation";
 
 // ─── Icone ────────────────────────────────────────────────────────────────────
-
 function IconBack()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="18" height="18"><polyline points="15 18 9 12 15 6"/></svg>; }
 function IconWand()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2L11 5"/></svg>; }
 function IconSave()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>; }
 function IconPlus()  { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>; }
 function IconTrash() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>; }
+function IconImage() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>; }
 
 // ─── Paste Step ───────────────────────────────────────────────────────────────
-
 function PasteStep({ onAnalyze }: { onAnalyze: (text: string) => void }) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,11 +40,19 @@ function PasteStep({ onAnalyze }: { onAnalyze: (text: string) => void }) {
           === IT === / === JP ===
         </code>
       </p>
-
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <textarea
           className="input"
-          placeholder={`Incolla qui la tua ricetta…\n\nFormato bilingue Gemini:\n=== IT ===\n🍽️  Ricetta …\nINGREDIENTI\n  • 200 ml latte\nPROCEDIMENTO\n  1. …\n\n=== JP ===\n🍽️  レシピ …`}
+          placeholder={`Incolla qui la tua ricetta…
+Formato bilingue Gemini:
+=== IT ===
+🍽️  Ricetta …
+INGREDIENTI
+• 200 ml latte
+PROCEDIMENTO
+1. …
+=== JP ===
+🍽️  レシピ …`}
           value={text}
           onChange={(e) => setText(e.target.value)}
           style={{ minHeight: 320, fontSize: "0.875rem", lineHeight: 1.7, fontFamily: "monospace" }}
@@ -69,7 +75,6 @@ function PasteStep({ onAnalyze }: { onAnalyze: (text: string) => void }) {
           </button>
         </div>
       </div>
-
       <div style={{
         marginTop: "1.5rem", padding: "1rem",
         background: "var(--brand-light)", borderRadius: "var(--radius-md)",
@@ -83,13 +88,10 @@ function PasteStep({ onAnalyze }: { onAnalyze: (text: string) => void }) {
 }
 
 // ─── Helpers conversione ingredienti ─────────────────────────────────────────
-
 interface EditableIng extends RawIngredient { _id: string; }
-
 function toEditable(ing: RawIngredient): EditableIng {
   return { ...ing, _id: generateId() };
 }
-
 function fromEditable(ing: EditableIng): Ingredient {
   const qtyNum = typeof ing.qty === "number" ? ing.qty
     : parseFloat(String(ing.qty).replace(",", "."));
@@ -103,7 +105,6 @@ function fromEditable(ing: EditableIng): Ingredient {
 }
 
 // ─── ParseReview ──────────────────────────────────────────────────────────────
-
 function ParseReview({
   parsed, originalText, onSave, onBack,
 }: {
@@ -121,6 +122,7 @@ function ParseReview({
   const [steps,  setSteps]  = useState<string[]>(parsed.steps.length ? parsed.steps : [""]);
   const [tags,   setTags]   = useState(parsed.tags.join(", "));
   const [saving, setSaving] = useState(false);
+  const [coverImg, setCoverImg] = useState<string | undefined>(undefined); // ✅ Nuova
   const [ingredients, setIngredients] = useState<EditableIng[]>(() =>
     parsed.ingredients.map(toEditable)
   );
@@ -128,7 +130,6 @@ function ParseReview({
   // Dati JP (presenti se parsed.isBilingual === true)
   const jaData = parsed.ja;
   const hasBilingual = parsed.isBilingual && !!jaData;
-
   const unitOptions: Array<"ml" | "g" | ""> = ["ml", "g", ""];
 
   const updateIng  = (id: string, field: string, value: string) =>
@@ -145,7 +146,6 @@ function ParseReview({
       const itIngredients = ingredients.filter((i) => i.name.trim()).map(fromEditable);
       const itSteps = steps.map((s) => s.trim()).filter(Boolean);
 
-      // Costruisce il campo recipe.ja se esistono dati bilingui
       const jaLocale = hasBilingual && jaData ? {
         title:       jaData.title,
         ingredients: jaData.ingredients
@@ -162,10 +162,9 @@ function ParseReview({
         tags:        tags.split(",").map((tg) => tg.trim()).filter(Boolean),
         steps:       itSteps,
         ingredients: itIngredients,
-        // ↓ Salva nel campo ja (RecipeLocale) — l'unico riconosciuto dal tipo Recipe
+        coverImage:  coverImg, // ✅ Salvataggio immagine (URL o base64)
         ...(jaLocale ? { ja: jaLocale } : {}),
       };
-
       await onSave(recipe);
     } finally {
       setSaving(false);
@@ -224,6 +223,45 @@ function ParseReview({
 
         {/* Form editabile */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          
+          {/* ✅ Immagine Ricetta (URL o File) */}
+          <div className="card" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <label style={{ fontWeight: 600, fontSize: "0.9rem" }}>📸 Immagine ricetta</label>
+            <input
+              className="input"
+              placeholder="Incolla link immagine (opzionale)…"
+              value={coverImg?.startsWith("http") ? coverImg : ""}
+              onChange={(e) => setCoverImg(e.target.value.trim() || undefined)}
+              style={{ fontSize: "0.85rem" }}
+            />
+            <div style={{
+              position: "relative", width: "100%", aspectRatio: "16/5",
+              borderRadius: "var(--radius-md)", overflow: "hidden",
+              border: "2px dashed var(--border)", background: "var(--bg-page)", cursor: "pointer",
+              transition: "border-color 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+            >
+              {coverImg ? (
+                <img src={coverImg} alt="Anteprima" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              ) : (
+                <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", background: "var(--bg-surface, var(--bg-page))" }}>
+                  <IconImage />
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Clicca per caricare file</span>
+                </div>
+              )}
+              <input type="file" accept="image/*" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !file.type.startsWith("image/")) return;
+                e.target.value = "";
+                setCoverImg(""); // Pulisce URL se si carica file
+                const reader = new FileReader();
+                reader.onload = () => setCoverImg(reader.result as string);
+                reader.readAsDataURL(file);
+              }} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
+            </div>
+          </div>
 
           {/* Titolo + meta */}
           <div className="card" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
@@ -361,7 +399,6 @@ function ParseReview({
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
-
 export default function AddRecipePage() {
   const navigate = useNavigate();
   const [parsed,       setParsed]       = useState<ParsedResult | null>(null);
