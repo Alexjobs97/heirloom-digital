@@ -1,6 +1,10 @@
 /**
- * EditRecipePage.tsx v3 — Modifica ricetta esistente.
- * FIX: URL immagine alternativo, tasto rimuovi immagine, navigazione post-salvataggio.
+ * EditRecipePage.tsx v3.1 — Modifica ricetta esistente.
+ * FIX CRITICI:
+ * 1. Immagine non si cancella più all'apertura (uso useEffect invece di render-side condition)
+ * 2. Supporto URL immagine alternativo al file (con preview live)
+ * 3. Tasto "Rimuovi" con animazione e testo corretto (niente fallback i18n rotti)
+ * 4. Navigazione garantita alla pagina dettaglio dopo il salvataggio
  */
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -17,25 +21,22 @@ function IconPlus()  { return <svg viewBox="0 0 24 24" fill="none" stroke="curre
 function IconTrash() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>; }
 function IconImage() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>; }
 
-// ─── Image Upload (con supporto URL + Rimuovi) ────────────────────────────────
+// ─── Image Upload (URL + File + Animazione Rimozione) ────────────────────────
 function ImageUpload({ current, onChange }: { current?: string; onChange: (url: string | undefined) => void }) {
-  const { t } = useTranslation();
   const [urlInput, setUrlInput] = useState(current?.startsWith("http") ? current : "");
+  const [isRemoving, setIsRemoving] = useState(false);
 
-  // Sincronizza input URL se il genitore cambia coverImg esternamente
+  // Sincronizza campo URL se il genitore cambia coverImg esternamente
   useEffect(() => {
-    if (current?.startsWith("http")) {
-      setUrlInput(current);
-    } else if (!current) {
-      setUrlInput("");
-    }
+    if (current?.startsWith("http")) setUrlInput(current);
+    else if (!current) setUrlInput("");
   }, [current]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
     e.target.value = "";
-    setUrlInput(""); // Pulisce campo URL se si carica un file
+    setUrlInput(""); // Pulisce URL se si carica un file
     try {
       const compressed = await compressImage(file);
       onChange(compressed);
@@ -46,58 +47,110 @@ function ImageUpload({ current, onChange }: { current?: string; onChange: (url: 
     }
   };
 
-  const handleUrlChange = (val: string) => {
+  const handleUrlApply = (val: string) => {
     setUrlInput(val);
     if (val.trim()) onChange(val.trim());
+    else if (!val) onChange(undefined);
   };
 
   const handleRemove = () => {
-    onChange(undefined);
-    setUrlInput("");
+    setIsRemoving(true);
+    setTimeout(() => {
+      onChange(undefined);
+      setUrlInput("");
+      setIsRemoving(false);
+    }, 500); // Durata animazione
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <label>Foto della ricetta</label>
+      <label style={{ fontWeight: 600, fontSize: "0.9rem" }}>📸 Foto della ricetta</label>
       
       {/* Campo URL */}
-      <input 
-        className="input" 
-        placeholder="Incolla URL immagine da internet…" 
-        value={urlInput}
-        onChange={(e) => handleUrlChange(e.target.value)}
-        style={{ flex: 1 }}
-      />
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <input 
+          className="input" 
+          placeholder="Incolla link immagine (es. da Pinterest/Google)…" 
+          value={urlInput}
+          onChange={(e) => handleUrlApply(e.target.value)}
+          style={{ flex: 1, fontSize: "0.85rem" }}
+        />
+        {urlInput && (
+          <button 
+            type="button" 
+            className="btn btn-ghost" 
+            onClick={() => handleUrlApply("")}
+            style={{ padding: "0.4rem", minWidth: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
+            title="Cancella URL"
+          >
+            ✕
+          </button>
+        )}
+      </div>
       
       {/* Preview */}
-      <div style={{
-        position: "relative", width: "100%", aspectRatio: "16/5",
-        borderRadius: "var(--radius-md)", overflow: "hidden",
-        border: "2px dashed var(--border)", background: "var(--bg-page)", cursor: "pointer",
-        transition: "border-color 0.15s",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+      <div 
+        className={isRemoving ? "image-remove-anim" : ""}
+        style={{
+          position: "relative", width: "100%", aspectRatio: "16/5",
+          borderRadius: "var(--radius-md)", overflow: "hidden",
+          border: "2px dashed var(--border)", background: "var(--bg-page)", cursor: "pointer",
+          transition: "border-color 0.15s",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
+        onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
       >
         {current ? (
-          <img src={current} alt="Anteprima" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <img src={current} alt="Anteprima" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         ) : (
           <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", background: "var(--bg-surface, var(--bg-page))" }}>
             <IconImage />
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Clicca per caricare o incolla URL</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Carica file o incolla URL qui sopra</span>
           </div>
         )}
         <input type="file" accept="image/*" onChange={handleFile}
           style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
       </div>
       
-      {/* Tasto rimuovi */}
+      {/* Tasto Rimuovi Animato */}
       {current && (
-        <button type="button" className="btn btn-ghost" onClick={handleRemove}
-          style={{ fontSize: "0.8rem", color: "var(--error)", alignSelf: "flex-start", gap: "0.3rem" }}>
-          🗑️ {t("misc.remove") || "Rimuovi immagine"}
+        <button 
+          type="button" 
+          onClick={handleRemove}
+          style={{
+            background: "none", border: "1px solid transparent", cursor: "pointer",
+            fontSize: "0.85rem", color: "var(--error)",
+            alignSelf: "flex-start", padding: "0.35rem 0.75rem",
+            borderRadius: "var(--radius-md)",
+            transition: "all 0.2s ease",
+            display: "flex", alignItems: "center", gap: "0.3rem"
+          }}
+          onMouseEnter={(e) => { 
+            e.currentTarget.style.transform = "scale(1.05)"; 
+            e.currentTarget.style.background = "rgba(220, 38, 38, 0.1)"; 
+            e.currentTarget.style.borderColor = "var(--error)"; 
+          }}
+          onMouseLeave={(e) => { 
+            e.currentTarget.style.transform = "scale(1)"; 
+            e.currentTarget.style.background = "transparent"; 
+            e.currentTarget.style.borderColor = "transparent"; 
+          }}
+        >
+          🗑️ <span style={{ fontWeight: 600 }}>Rimuovi immagine</span> <span style={{ fontSize: "0.7rem", opacity: 0.7, fontStyle: "italic" }}>(puf!)</span>
         </button>
       )}
+
+      <style>{`
+        @keyframes poof {
+          0% { transform: scale(1) rotate(0deg); opacity: 1; filter: blur(0); }
+          40% { transform: scale(1.08) rotate(2deg); opacity: 0.9; filter: blur(1px); }
+          100% { transform: scale(0.85) rotate(-3deg); opacity: 0; filter: blur(4px); }
+        }
+        .image-remove-anim { 
+          animation: poof 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important; 
+          transform-origin: center center;
+        }
+      `}</style>
     </div>
   );
 }
@@ -142,21 +195,21 @@ export default function EditRecipePage() {
   const [steps,    setSteps]    = useState<string[]>([""]);
   const [ingredients, setIngredients] = useState<EditableIng[]>([]);
   const [saving,   setSaving]   = useState(false);
-  const [inited,   setInited]   = useState(false);
 
-  // Inizializza il form una volta sola quando recipe arriva
-  if (recipe && !inited) {
-    setTitle(recipe.title);
-    setYield(recipe.yield);
-    setTime(recipe.totalTime);
-    setTags(recipe.tags.join(", "));
-    setNotes(recipe.notes ?? "");
-    setSource(recipe.source ?? "");
-    setCoverImg(recipe.coverImage);
-    setSteps(recipe.steps.length ? recipe.steps : [""]);
-    setIngredients(recipe.ingredients.map(toEditable));
-    setInited(true);
-  }
+  // ✅ FIX CRITICO: usa useEffect per inizializzare il form quando recipe arriva
+  useEffect(() => {
+    if (recipe) {
+      setTitle(recipe.title);
+      setYield(recipe.yield);
+      setTime(recipe.totalTime);
+      setTags(recipe.tags.join(", "));
+      setNotes(recipe.notes ?? "");
+      setSource(recipe.source ?? "");
+      setCoverImg(recipe.coverImage); // Ora non si perde più!
+      setSteps(recipe.steps.length ? recipe.steps : [""]);
+      setIngredients(recipe.ingredients.map(toEditable));
+    }
+  }, [recipe]);
 
   const updateIng  = (id: string, field: keyof EditableIng, value: string) =>
     setIngredients((prev) => prev.map((i) => i._id === id ? { ...i, [field]: value } : i));
@@ -171,7 +224,7 @@ export default function EditRecipePage() {
     setSaving(true);
     try {
       const updated: Recipe = {
-        ...recipe,               // ← preserva recipe.ja e tutti gli altri campi
+        ...recipe,
         title:       title.trim() || recipe.title,
         yield:       Math.max(1, yield_),
         totalTime:   Math.max(0, time),
@@ -183,8 +236,10 @@ export default function EditRecipePage() {
         ingredients: ingredients.filter((i) => i.name.trim()).map(fromEditable),
       };
       await updateRecipe(updated);
-      // ✅ Naviga alla pagina dettaglio ricetta dopo il salvataggio
+      // ✅ Navigazione immediata alla pagina dettaglio
       navigate(`/ricette/${recipe.id}`);
+    } catch (err) {
+      console.error("Errore salvataggio:", err);
     } finally {
       setSaving(false);
     }
